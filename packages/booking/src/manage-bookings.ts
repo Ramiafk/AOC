@@ -18,6 +18,10 @@ export class ManageBookings {
   private readonly now: () => Date;
   constructor(repository: BookingRepository, now = () => new Date()) { this.repository = repository; this.now = now; }
 
+  async scopeForOffering(context: RequestContext, id: EntityId) { const value = await this.repository.findOffering(context.tenantId, id); invariant(value, "OFFERING_NOT_FOUND", "Service offering was not found"); return { organizationId: value.organizationId, siteId: value.siteId }; }
+  async scopeForSlot(context: RequestContext, id: EntityId) { const slot = await this.repository.findSlot(context.tenantId, id); invariant(slot, "SLOT_NOT_FOUND", "Availability slot was not found"); return this.scopeForOffering(context, slot.offeringId); }
+  async scopeForBooking(context: RequestContext, id: EntityId) { const value = await this.repository.findBooking(context.tenantId, id); invariant(value, "BOOKING_NOT_FOUND", "Booking was not found"); return { organizationId: value.organizationId, siteId: value.siteId }; }
+
   async createOffering(context: RequestContext, input: Omit<ServiceOfferingProps, "id" | "tenantId" | "createdAt" | "active">): Promise<Readonly<ServiceOfferingProps>> {
     const offering = ServiceOffering.create({ ...input, tenantId: context.tenantId }, this.now()).snapshot();
     await this.repository.saveOffering(offering);
