@@ -53,8 +53,9 @@ Le découpage complet est dans `docs/DELIVERY_LOTS.md` et les décisions dans `d
 - Lot 4B : stock de pièces, réservations et approvisionnement — terminé.
 - Lot 4C : fournisseurs, réceptions partielles/complètes et valorisation du stock au coût moyen pondéré — terminé.
 - Lot 4D : fermeture des reliquats, retours fournisseur et alertes de réapprovisionnement — terminé.
-- Lot 5A : stock commercial de véhicules, préparation et publication multicanal — en développement.
-- Prochaine tranche : médias, préparation détaillée, reprise et vente du véhicule.
+- Lot 5A : stock commercial de véhicules, préparation et publication multicanal — terminé.
+- Lot 5B : checklist de préparation et médias du véhicule — en développement.
+- Prochaine tranche : retrait des annonces, vente, marge et livraison.
 
 ### Base locale
 

@@ -7,6 +7,8 @@ export type PublicationChannel = "professional_website" | "professional_app" | "
 
 export interface VehicleStockItemProps extends TenantScoped { id: EntityId; organizationId: EntityId; siteId: EntityId; assetId: EntityId; acquisitionMode: AcquisitionMode; acquisitionCostCents: number; askingPriceCents?: number | undefined; status: VehicleStockStatus; createdBy: EntityId; createdAt: string; updatedAt: string }
 export interface VehiclePublicationProps extends TenantScoped { id: EntityId; organizationId: EntityId; siteId: EntityId; stockItemId: EntityId; channel: PublicationChannel; askingPriceCents: number; status: "published" | "withdrawn"; publishedBy: EntityId; publishedAt: string }
+export interface VehiclePreparationCheckProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; label:string; required:boolean; completedBy?:EntityId|undefined; completedAt?:string|undefined; createdAt:string }
+export interface VehicleMediaProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; kind:"image"|"video"; storageKey:string; position:number; primary:boolean; createdBy:EntityId; createdAt:string }
 
 export interface VehicleCommerceRepository {
   assetExists(tenantId: TenantId, assetId: EntityId): Promise<boolean>;
@@ -14,8 +16,13 @@ export interface VehicleCommerceRepository {
   saveStockItem(value: Readonly<VehicleStockItemProps>): Promise<void>;
   findStockItem(tenantId: TenantId, id: EntityId): Promise<Readonly<VehicleStockItemProps> | null>;
   listPublications(tenantId: TenantId, stockItemId: EntityId): Promise<readonly Readonly<VehiclePublicationProps>[]>;
+  savePreparationCheck(value:Readonly<VehiclePreparationCheckProps>):Promise<void>;
+  listPreparationChecks(tenantId:TenantId,stockItemId:EntityId):Promise<readonly Readonly<VehiclePreparationCheckProps>[]>;
+  saveMedia(value:Readonly<VehicleMediaProps>):Promise<void>;
+  listMedia(tenantId:TenantId,stockItemId:EntityId):Promise<readonly Readonly<VehicleMediaProps>[]>;
   withStockItemLock<T>(tenantId: TenantId, stockItemId: EntityId, operation: (repository: VehicleCommerceRepository) => Promise<T>): Promise<T>;
   publish(value: Readonly<VehiclePublicationProps>, stockItem: Readonly<VehicleStockItemProps>): Promise<void>;
+  markReady(stockItem:Readonly<VehicleStockItemProps>,readyBy:EntityId):Promise<void>;
 }
 
 export class ManageVehicleCommerce {
@@ -33,7 +40,10 @@ export class ManageVehicleCommerce {
   }
 
   async startPreparation(context: RequestContext, id: EntityId) { return this.transition(context,id,"acquired","preparing","STOCK_ITEM_NOT_ACQUIRED"); }
-  async markReady(context: RequestContext, id: EntityId, askingPriceCents: number) { invariant(askingPriceCents>0,"INVALID_ASKING_PRICE","Asking price must be positive"); const value=await this.item(context.tenantId,id); invariant(value.status==="preparing","STOCK_ITEM_NOT_PREPARING","Stock item is not being prepared"); const next={...value,askingPriceCents,status:"ready" as const,updatedAt:this.now().toISOString()}; await this.repository.saveStockItem(next); return next; }
+  async addPreparationCheck(context:RequestContext,id:EntityId,input:{label:string;required:boolean}){return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const value=await this.item(context.tenantId,id,repository);invariant(value.status==="preparing","STOCK_ITEM_NOT_PREPARING","Stock item is not being prepared");invariant(input.label.trim().length>=2,"INVALID_PREPARATION_CHECK","Preparation check is invalid");const check:VehiclePreparationCheckProps={id:newEntityId(),tenantId:context.tenantId,organizationId:value.organizationId,siteId:value.siteId,stockItemId:id,label:input.label.trim(),required:input.required,createdAt:this.now().toISOString()};await repository.savePreparationCheck(check);return check;});}
+  async completePreparationCheck(context:RequestContext,stockItemId:EntityId,checkId:EntityId){return this.repository.withStockItemLock(context.tenantId,stockItemId,async repository=>{const value=await this.item(context.tenantId,stockItemId,repository);invariant(value.status==="preparing","STOCK_ITEM_NOT_PREPARING","Stock item is not being prepared");const checks=await repository.listPreparationChecks(context.tenantId,stockItemId),check=checks.find(item=>item.id===checkId);invariant(check,"PREPARATION_CHECK_NOT_FOUND","Preparation check was not found");const completed={...check,completedBy:context.actorId,completedAt:this.now().toISOString()};await repository.savePreparationCheck(completed);return completed;});}
+  async addMedia(context:RequestContext,id:EntityId,input:{kind:"image"|"video";storageKey:string;position:number;primary:boolean}){return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const value=await this.item(context.tenantId,id,repository);invariant(value.status==="preparing","STOCK_ITEM_NOT_PREPARING","Stock item is not being prepared");invariant(input.storageKey.trim().length>=3&&input.position>=0,"INVALID_VEHICLE_MEDIA","Vehicle media is invalid");const media:VehicleMediaProps={id:newEntityId(),tenantId:context.tenantId,organizationId:value.organizationId,siteId:value.siteId,stockItemId:id,...input,storageKey:input.storageKey.trim(),createdBy:context.actorId,createdAt:this.now().toISOString()};await repository.saveMedia(media);return media;});}
+  async markReady(context: RequestContext, id: EntityId, askingPriceCents: number) { invariant(askingPriceCents>0,"INVALID_ASKING_PRICE","Asking price must be positive");return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const value=await this.item(context.tenantId,id,repository);invariant(value.status==="preparing","STOCK_ITEM_NOT_PREPARING","Stock item is not being prepared");const checks=await repository.listPreparationChecks(context.tenantId,id),media=await repository.listMedia(context.tenantId,id);invariant(checks.length>0&&!checks.some(check=>check.required&&!check.completedAt),"PREPARATION_INCOMPLETE","Required preparation checks are incomplete");invariant(media.some(item=>item.primary&&item.kind==="image"),"PRIMARY_IMAGE_REQUIRED","A primary image is required");const next={...value,askingPriceCents,status:"ready" as const,updatedAt:this.now().toISOString()};await repository.markReady(next,context.actorId);return next;}); }
 
   async publish(context: RequestContext, id: EntityId, channel: PublicationChannel) {
     return this.repository.withStockItemLock(context.tenantId,id,async repository=>{

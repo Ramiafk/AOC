@@ -10,10 +10,16 @@ const acquisition=z.object({organizationId:uuid,siteId:uuid,assetId:uuid,acquisi
 const idParams=z.object({id:uuid});
 const readyBody=z.object({askingPriceCents:z.number().int().positive()});
 const publishBody=z.object({channel:z.enum(["professional_website","professional_app","central_marketplace"])});
+const checkBody=z.object({label:z.string().trim().min(2),required:z.boolean()});
+const checkParams=z.object({id:uuid,checkId:uuid});
+const mediaBody=z.object({kind:z.enum(["image","video"]),storageKey:z.string().trim().min(3),position:z.number().int().min(0),primary:z.boolean()});
 
 export function registerVehicleCommerceRoutes(app:FastifyInstance,contexts:RequestContextResolver,authorizer:RouteAuthorizer,commerce:ManageVehicleCommerce):void{
   app.post("/v1/vehicle-stock",async request=>{const context=await contexts.resolve(request);const body=acquisition.parse(request.body);await authorizer.require(context,"commerce.manage",{organizationId:body.organizationId as EntityId,siteId:body.siteId as EntityId});return commerce.acquire(context,{...body,organizationId:body.organizationId as EntityId,siteId:body.siteId as EntityId,assetId:body.assetId as EntityId});});
   app.post("/v1/vehicle-stock/:id/start-preparation",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.startPreparation(context,params.id as EntityId);});
+  app.post("/v1/vehicle-stock/:id/preparation-checks",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params),body=checkBody.parse(request.body);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.addPreparationCheck(context,params.id as EntityId,body);});
+  app.post("/v1/vehicle-stock/:id/preparation-checks/:checkId/complete",async request=>{const context=await contexts.resolve(request);const params=checkParams.parse(request.params);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.completePreparationCheck(context,params.id as EntityId,params.checkId as EntityId);});
+  app.post("/v1/vehicle-stock/:id/media",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params),body=mediaBody.parse(request.body);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.addMedia(context,params.id as EntityId,body);});
   app.post("/v1/vehicle-stock/:id/ready",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params),body=readyBody.parse(request.body);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.markReady(context,params.id as EntityId,body.askingPriceCents);});
   app.post("/v1/vehicle-stock/:id/publications",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params),body=publishBody.parse(request.body);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.publish(context,params.id as EntityId,body.channel);});
 }
