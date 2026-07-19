@@ -1,0 +1,32 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { AuditRecorder, InMemoryAuditSink } from "../audit/src/audit.ts";
+import { PlatformApplication } from "../../apps/api/src/application.ts";
+import { buildApp } from "../../apps/api/src/build-app.ts";
+import { MapTokenVerifier, RequestContextResolver } from "../../apps/api/src/context-resolver.ts";
+import { InMemoryPlatformRepository } from "../../apps/api/src/in-memory-platform-repository.ts";
+import { InMemoryMembershipReader, RouteAuthorizer } from "../../apps/api/src/route-authorizer.ts";
+import { Membership } from "../organizations/src/access-control.ts";
+import { tenantId, type EntityId } from "../core/src/identity.ts";
+import { ManageInventory } from "../inventory/src/manage-inventory.ts";
+import { InMemoryInventoryRepository } from "../inventory/src/in-memory-inventory-repository.ts";
+
+test("runs supplier to valued receipt through scoped HTTP routes", async () => {
+  const tenant = "11111111-1111-4111-8111-111111111111", actor = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", organizationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", siteId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  const contexts = new RequestContextResolver(new MapTokenVerifier(new Map([["inventory-token", { tenantId: tenant, actorId: actor }]])));
+  const membership = Membership.create({ tenantId: tenantId(tenant), organizationId: organizationId as EntityId, userId: actor as EntityId, role: "owner", siteIds: [], extraPermissions: [] }).snapshot();
+  const inventoryRepository = new InMemoryInventoryRepository();
+  const inventory = new ManageInventory(inventoryRepository, () => new Date("2026-07-21T10:00:00Z"));
+  const application = new PlatformApplication(new InMemoryPlatformRepository(), new AuditRecorder(new InMemoryAuditSink()));
+  const app = buildApp({ application, contexts, authorizer: new RouteAuthorizer(new InMemoryMembershipReader([membership])), modules: { inventory } });
+  const headers = { authorization: "Bearer inventory-token" };
+  const supplier = await app.inject({ method: "POST", url: "/v1/suppliers", headers, payload: { organizationId, code: "SUP-01", name: "Supplier One" } }); assert.equal(supplier.statusCode, 200);
+  const part = await app.inject({ method: "POST", url: "/v1/parts", headers, payload: { organizationId, sku: "PART-01", name: "Oil filter", unitCostCents: 800, salePriceCents: 1600, reorderPoint: 2, reorderQuantity: 10 } }); assert.equal(part.statusCode, 200);
+  const order = await app.inject({ method: "POST", url: "/v1/purchase-orders", headers, payload: { organizationId, siteId, supplierId: supplier.json().id, lines: [{ partId: part.json().id, quantity: 5, unitCostCents: 900 }] } }); assert.equal(order.statusCode, 200);
+  await app.inject({ method: "POST", url: `/v1/purchase-orders/${order.json().id}/order`, headers });
+  const receipt = await app.inject({ method: "POST", url: `/v1/purchase-orders/${order.json().id}/receipts`, headers, payload: { lines: [{ partId: part.json().id, quantity: 5, unitCostCents: 900 }] } });
+  assert.equal(receipt.statusCode, 200); assert.equal(receipt.json().order.status, "received"); assert.equal(receipt.json().positions[0].averageUnitCostCents, 900);
+  const denied = await app.inject({ method: "POST", url: "/v1/suppliers", headers, payload: { organizationId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", code: "NOPE", name: "Denied" } });
+  assert.equal(denied.statusCode, 403); assert.equal(denied.json().error, "ORGANIZATION_ACCESS_DENIED");
+  await app.close();
+});
