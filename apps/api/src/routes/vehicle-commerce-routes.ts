@@ -13,6 +13,7 @@ const publishBody=z.object({channel:z.enum(["professional_website","professional
 const checkBody=z.object({label:z.string().trim().min(2),required:z.boolean()});
 const checkParams=z.object({id:uuid,checkId:uuid});
 const mediaBody=z.object({kind:z.enum(["image","video"]),storageKey:z.string().trim().min(3),position:z.number().int().min(0),primary:z.boolean()});
+const saleBody=z.object({buyerCustomerId:uuid,salePriceCents:z.number().int().positive()});
 
 export function registerVehicleCommerceRoutes(app:FastifyInstance,contexts:RequestContextResolver,authorizer:RouteAuthorizer,commerce:ManageVehicleCommerce):void{
   app.post("/v1/vehicle-stock",async request=>{const context=await contexts.resolve(request);const body=acquisition.parse(request.body);await authorizer.require(context,"commerce.manage",{organizationId:body.organizationId as EntityId,siteId:body.siteId as EntityId});return commerce.acquire(context,{...body,organizationId:body.organizationId as EntityId,siteId:body.siteId as EntityId,assetId:body.assetId as EntityId});});
@@ -22,4 +23,5 @@ export function registerVehicleCommerceRoutes(app:FastifyInstance,contexts:Reque
   app.post("/v1/vehicle-stock/:id/media",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params),body=mediaBody.parse(request.body);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.addMedia(context,params.id as EntityId,body);});
   app.post("/v1/vehicle-stock/:id/ready",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params),body=readyBody.parse(request.body);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.markReady(context,params.id as EntityId,body.askingPriceCents);});
   app.post("/v1/vehicle-stock/:id/publications",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params),body=publishBody.parse(request.body);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.publish(context,params.id as EntityId,body.channel);});
+  app.post("/v1/vehicle-stock/:id/sale",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params),body=saleBody.parse(request.body);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.sell(context,params.id as EntityId,{buyerCustomerId:body.buyerCustomerId as EntityId,salePriceCents:body.salePriceCents});});
 }
