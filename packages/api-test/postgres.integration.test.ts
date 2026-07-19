@@ -118,6 +118,19 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     assert.equal(await commerceRepository.findStockItem(tenantId(t2),stockItem.id),null);
     await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_stock_items(id,tenant_id,organization_id,site_id,asset_id,acquisition_mode,acquisition_cost_cents,status,created_by,created_at,updated_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,'purchase',100,'acquired',$5,now(),now())`,[t1,organizationId,otherSiteId,otherAssetId,context.actorId]),/vehicle_stock_tenant_organization_site_fk/);
     await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_publications(id,tenant_id,organization_id,site_id,stock_item_id,channel,asking_price_cents,status,published_by,published_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,'professional_website',1590000,'published',$5,now())`,[t1,otherOrganizationId,otherSiteId,stockItem.id,context.actorId]),/vehicle_publications_tenant_stock_scope_fk/);
+    const readinessStock=await commerce.acquire(context,{organizationId,siteId,assetId:otherAssetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});
+    await commerce.startPreparation(context,readinessStock.id);
+    const concurrencyCheck=await commerce.addPreparationCheck(context,readinessStock.id,{label:"Concurrency safety",required:true});
+    await commerce.completePreparationCheck(context,readinessStock.id,concurrencyCheck.id);
+    await commerce.addMedia(context,readinessStock.id,{kind:"image",storageKey:`vehicles/${readinessStock.id}/cover.jpg`,position:0,primary:true});
+    const readinessRace=await Promise.allSettled([
+      commerce.markReady(context,readinessStock.id,1500000),
+      commerce.addPreparationCheck(context,readinessStock.id,{label:"Late required check",required:true})
+    ]);
+    assert.equal(readinessRace.filter(result=>result.status==="fulfilled").length,1);
+    const racedStock=await commerceRepository.findStockItem(context.tenantId,readinessStock.id);
+    const incompleteRequired=(await adminPool.query("SELECT count(*)::int AS count FROM vehicle_preparation_checks WHERE tenant_id=$1 AND stock_item_id=$2 AND required AND completed_at IS NULL",[t1,readinessStock.id])).rows[0].count;
+    assert.ok(racedStock?.status!=="ready"||incompleteRequired===0);
   } finally {
     if(applicationPool) await applicationPool.end();
     await adminPool.query(`DROP OWNED BY ${role}`).catch(()=>undefined);

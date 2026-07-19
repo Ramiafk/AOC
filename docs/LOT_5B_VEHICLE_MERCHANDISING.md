@@ -22,3 +22,7 @@ La migration `019_vehicle_merchandising.sql` ajoute les contrôles et médias av
 - l'upload binaire et la génération de variantes restent délégués à un futur connecteur média ;
 - pas encore de modération, recadrage ni ordre automatique des photos ;
 - les modèles de checklist par activité seront ajoutés ultérieurement.
+
+## Correction de concurrence
+
+Toutes les mutations de checklist et de médias prennent désormais le verrou du stock, relisent le statut dans la transaction verrouillée et écrivent via le repository transaction-scoped. Ainsi, une mutation tardive est soit sérialisée avant `markReady` et prise en compte par sa validation, soit rejetée après le passage à `ready`.
