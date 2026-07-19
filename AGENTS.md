@@ -174,20 +174,25 @@ L'agent doit toujours fournir :
 - Centraliser plusieurs domaines dans un seul route registry ou service géant.
 - Modifier ou supprimer l'historique des migrations déjà publiées.
 
-## 13. Cadence et profondeur minimales de développement
+## 13. Cadence minimale : plusieurs lots par session
 
-Chaque session de développement demandée doit représenter au minimum **60 minutes de travail technique actif et utile** sur le projet.
+Chaque session de développement demandée doit représenter au minimum **60 minutes de travail technique actif et utile**.
 
-- Ne pas arrêter la session dès qu'un sous-lot superficiel compile ou que quelques tests passent.
-- Choisir avant de commencer un périmètre suffisamment substantiel pour occuper au moins 60 minutes : implémentation métier, sécurité, persistance, migrations, tests négatifs, documentation et vérification de concurrence lorsque pertinent.
-- Si le lot principal est terminé avant 60 minutes, poursuivre sur les éléments directement liés au même objectif : durcissement des invariants, tests supplémentaires, cas limites, observabilité, documentation, performance, qualité et dette technique locale.
-- Ne pas ajouter un lot métier sans rapport uniquement pour remplir le temps. Une PR doit rester cohérente et centrée sur un objectif unique.
-- Si plusieurs sous-lots sont nécessaires pour atteindre une profondeur suffisante, ils doivent appartenir à la même capacité métier et être explicitement décrits dans la PR.
-- À l'issue des 60 minutes, si le lot n'est pas terminé, continuer le développement jusqu'à atteindre la Definition of Done. Le délai de 60 minutes est un minimum de travail, jamais une limite maximale.
-- Ne demander la revue CTO qu'une fois le lot réellement terminé, la CI verte et tous les livrables obligatoires présents.
-- Le compte rendu doit indiquer l'heure approximative de début, la durée active consacrée, les sous-tâches réalisées et ce qui a nécessité le plus de travail.
+L'objectif n'est pas de faire durer artificiellement un seul petit lot pendant une heure. L'agent doit enchaîner **plusieurs lots ou sous-lots réellement terminés** pendant la même session, autant que la qualité le permet.
 
-Il est interdit de simuler une durée, d'attendre passivement ou d'ajouter du code inutile pour atteindre 60 minutes. La durée doit correspondre à un développement réel, vérifiable dans les commits, les tests et la documentation.
+- Commencer par le prochain lot prioritaire du Blueprint ou de `docs/DELIVERY_LOTS.md`.
+- Dès qu'un lot atteint sa Definition of Done locale, créer son commit, sa branche et sa PR brouillon dédiés, puis passer immédiatement au lot suivant sans attendre la revue CTO.
+- Chaque lot doit conserver sa propre branche et sa propre PR. Ne jamais regrouper plusieurs objectifs indépendants dans une seule PR.
+- Lorsqu'un lot suivant dépend d'un lot encore non fusionné, créer une branche empilée depuis la branche précédente et indiquer clairement cette dépendance dans la PR. Après fusion du lot parent, rebaser ou retargeter proprement la PR dépendante vers `main`.
+- Privilégier des lots successifs cohérents dans la roadmap, mais conserver une séparation stricte des PR, migrations, tests et documentations.
+- Continuer à développer et ouvrir des PR brouillon jusqu'à avoir accompli au moins 60 minutes de travail réel.
+- Si les lots sont courts, en livrer plusieurs dans la même session plutôt que de gonfler artificiellement leur périmètre.
+- Si, au terme des 60 minutes, le lot actuellement commencé n'est pas terminé, continuer jusqu'à sa Definition of Done avant d'arrêter.
+- Ne jamais interrompre un lot à moitié uniquement parce que les 60 minutes sont écoulées.
+- Ne demander une revue CTO pour chaque PR qu'une fois sa CI verte et tous ses livrables présents.
+- Le compte rendu final de session doit lister tous les lots traités, leurs branches, commits, PR, dépendances éventuelles, validations CI et limites restantes.
+
+Il est interdit de simuler une durée, d'attendre passivement, d'ajouter du code inutile ou de fusionner plusieurs lots indépendants dans une seule PR pour atteindre 60 minutes.
 
 ## 14. Definition of Done
 
