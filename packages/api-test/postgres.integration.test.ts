@@ -40,11 +40,11 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
   try {
     await migrate(adminPool,await loadMigrations(resolve("infrastructure/postgres")));
     const password=randomBytes(24).toString("hex");
-    const rolePasswordSql=await adminPool.query<{sql:string}>("SELECT format('CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L',$1,$2) AS sql",[role,password]);
+    const rolePasswordSql=await adminPool.query<{sql:string}>("SELECT format('CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L',$1::text,$2::text) AS sql",[role,password]);
     await adminPool.query(`DROP OWNED BY ${role}`).catch(()=>undefined);
     await adminPool.query(`DROP ROLE IF EXISTS ${role}`);
     await adminPool.query(rolePasswordSql.rows[0]!.sql);
-    const connectGrant=await adminPool.query<{sql:string}>("SELECT format('GRANT CONNECT ON DATABASE %I TO %I',current_database(),$1) AS sql",[role]);
+    const connectGrant=await adminPool.query<{sql:string}>("SELECT format('GRANT CONNECT ON DATABASE %I TO %I',current_database(),$1::text) AS sql",[role]);
     await adminPool.query(connectGrant.rows[0]!.sql);
     await adminPool.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
     await adminPool.query(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO ${role}`);
