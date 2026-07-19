@@ -11,6 +11,8 @@ import { InMemoryPlatformRepository } from "./in-memory-platform-repository.ts";
 import { RouteAuthorizer } from "./route-authorizer.ts";
 import { ManageInventory } from "../../../packages/inventory/src/manage-inventory.ts";
 import { InMemoryInventoryRepository } from "../../../packages/inventory/src/in-memory-inventory-repository.ts";
+import { ManageVehicleCommerce } from "../../../packages/vehicle-commerce/src/vehicle-commerce.ts";
+import { InMemoryVehicleCommerceRepository } from "../../../packages/vehicle-commerce/src/in-memory-vehicle-commerce-repository.ts";
 
 if(process.env.NODE_ENV==="production")throw new Error("IN_MEMORY_ADAPTERS_FORBIDDEN_IN_PRODUCTION");
 const tenant=process.env.DEV_TENANT_ID,actor=process.env.DEV_ACTOR_ID,token=process.env.DEV_ACCESS_TOKEN;
@@ -20,4 +22,4 @@ const application=new PlatformApplication(repository,new AuditRecorder(new InMem
 const contexts=new RequestContextResolver(new MapTokenVerifier(new Map([[token,{tenantId:tenant,actorId:actor}]])));
 const membership=Membership.create({tenantId:tenantId(tenant),organizationId:actor as EntityId,userId:actor as EntityId,role:"owner",siteIds:[],extraPermissions:[]}).snapshot();
 const memberships=new InMemoryMembershipRepository([membership]);
-await buildApp({application,contexts,authorizer:new RouteAuthorizer(memberships),modules:{memberships:new ManageMemberships(memberships,new InMemoryInvitationNotifier()),inventory:new ManageInventory(new InMemoryInventoryRepository())}}).listen({host:"127.0.0.1",port:Number(process.env.PORT??3000)});
+await buildApp({application,contexts,authorizer:new RouteAuthorizer(memberships),modules:{memberships:new ManageMemberships(memberships,new InMemoryInvitationNotifier()),inventory:new ManageInventory(new InMemoryInventoryRepository()),vehicleCommerce:new ManageVehicleCommerce(new InMemoryVehicleCommerceRepository())}}).listen({host:"127.0.0.1",port:Number(process.env.PORT??3000)});

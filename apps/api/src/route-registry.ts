@@ -15,6 +15,7 @@ import type { ManageQuotes } from "../../../packages/quotes/src/manage-quotes.ts
 import type { ManageFinance } from "../../../packages/finance/src/manage-finance.ts";
 import type { ManageWorkshop } from "../../../packages/workshop/src/manage-workshop.ts";
 import type { ManageInventory } from "../../../packages/inventory/src/manage-inventory.ts";
+import type { ManageVehicleCommerce } from "../../../packages/vehicle-commerce/src/vehicle-commerce.ts";
 import { registerOrganizationRoutes } from "./routes/core-routes.ts";
 import { registerMembershipRoutes } from "./routes/membership-routes.ts";
 import { registerBookingRoutes } from "./routes/booking-routes.ts";
@@ -27,6 +28,7 @@ import { registerQuoteRoutes } from "./routes/quote-routes.ts";
 import { registerFinanceRoutes } from "./routes/finance-routes.ts";
 import { registerWorkshopRoutes } from "./routes/workshop-routes.ts";
 import { registerInventoryRoutes } from "./routes/inventory-routes.ts";
+import { registerVehicleCommerceRoutes } from "./routes/vehicle-commerce-routes.ts";
 
 export interface ApiModules {
   memberships?: ManageMemberships;
@@ -40,6 +42,7 @@ export interface ApiModules {
   finance?: ManageFinance;
   workshop?: ManageWorkshop;
   inventory?: ManageInventory;
+  vehicleCommerce?: ManageVehicleCommerce;
 }
 
 export interface ApiComposition {
@@ -73,5 +76,6 @@ export function buildRouteRegistry({ application, contexts, authorizer, modules 
   if (modules.finance) registerFinanceRoutes(app, contexts, authorizer, modules.finance);
   if (modules.workshop) registerWorkshopRoutes(app, contexts, authorizer, modules.workshop);
   if (modules.inventory) registerInventoryRoutes(app, contexts, authorizer, modules.inventory);
+  if (modules.vehicleCommerce) registerVehicleCommerceRoutes(app, contexts, authorizer, modules.vehicleCommerce);
   return app;
 }

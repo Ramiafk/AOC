@@ -9,6 +9,8 @@ import { OidcTokenVerifier, RequestContextResolver } from "./context-resolver.ts
 import { RouteAuthorizer } from "./route-authorizer.ts";
 import { ManageInventory } from "../../../packages/inventory/src/manage-inventory.ts";
 import { PostgresInventoryRepository } from "../../../infrastructure/postgres/postgres-inventory-repository.ts";
+import { ManageVehicleCommerce } from "../../../packages/vehicle-commerce/src/vehicle-commerce.ts";
+import { PostgresVehicleCommerceRepository } from "../../../infrastructure/postgres/postgres-vehicle-commerce-repository.ts";
 
 if(process.env.NODE_ENV!=="production")throw new Error("Use development-server.ts outside production");
 if(process.env.DEV_ACCESS_TOKEN||process.env.DEV_TENANT_ID||process.env.DEV_ACTOR_ID)throw new Error("DEV_CREDENTIALS_FORBIDDEN_IN_PRODUCTION");
@@ -18,6 +20,6 @@ const pool=new Pool({connectionString:databaseUrl,max:Number(process.env.DATABAS
 const membershipRepository=new PostgresMembershipRepository(pool);
 const application=new PlatformApplication(new PostgresPlatformRepository(pool),new AuditRecorder(new PostgresAuditSink(pool)));
 const contexts=new RequestContextResolver(new OidcTokenVerifier({issuer,audience,jwksUrl:new URL(jwks)}));
-const app=buildApp({application,contexts,authorizer:new RouteAuthorizer(membershipRepository),modules:{inventory:new ManageInventory(new PostgresInventoryRepository(pool))}});
+const app=buildApp({application,contexts,authorizer:new RouteAuthorizer(membershipRepository),modules:{inventory:new ManageInventory(new PostgresInventoryRepository(pool)),vehicleCommerce:new ManageVehicleCommerce(new PostgresVehicleCommerceRepository(pool))}});
 const close=async()=>{await app.close();await pool.end();};process.once("SIGTERM",close);process.once("SIGINT",close);
 await app.listen({host:process.env.HOST??"0.0.0.0",port:Number(process.env.PORT??3000)});

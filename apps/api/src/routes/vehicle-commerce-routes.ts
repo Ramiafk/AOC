@@ -1,0 +1,19 @@
+import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import type { EntityId } from "../../../../packages/core/src/identity.ts";
+import type { ManageVehicleCommerce } from "../../../../packages/vehicle-commerce/src/vehicle-commerce.ts";
+import type { RequestContextResolver } from "../context-resolver.ts";
+import type { RouteAuthorizer } from "../route-authorizer.ts";
+
+const uuid=z.string().uuid();
+const acquisition=z.object({organizationId:uuid,siteId:uuid,assetId:uuid,acquisitionMode:z.enum(["purchase","trade_in","consignment"]),acquisitionCostCents:z.number().int().min(0)});
+const idParams=z.object({id:uuid});
+const readyBody=z.object({askingPriceCents:z.number().int().positive()});
+const publishBody=z.object({channel:z.enum(["professional_website","professional_app","central_marketplace"])});
+
+export function registerVehicleCommerceRoutes(app:FastifyInstance,contexts:RequestContextResolver,authorizer:RouteAuthorizer,commerce:ManageVehicleCommerce):void{
+  app.post("/v1/vehicle-stock",async request=>{const context=await contexts.resolve(request);const body=acquisition.parse(request.body);await authorizer.require(context,"commerce.manage",{organizationId:body.organizationId as EntityId,siteId:body.siteId as EntityId});return commerce.acquire(context,{...body,organizationId:body.organizationId as EntityId,siteId:body.siteId as EntityId,assetId:body.assetId as EntityId});});
+  app.post("/v1/vehicle-stock/:id/start-preparation",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.startPreparation(context,params.id as EntityId);});
+  app.post("/v1/vehicle-stock/:id/ready",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params),body=readyBody.parse(request.body);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.markReady(context,params.id as EntityId,body.askingPriceCents);});
+  app.post("/v1/vehicle-stock/:id/publications",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params),body=publishBody.parse(request.body);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.publish(context,params.id as EntityId,body.channel);});
+}
