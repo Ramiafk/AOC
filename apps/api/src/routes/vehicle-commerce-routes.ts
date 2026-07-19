@@ -16,6 +16,7 @@ const mediaBody=z.object({kind:z.enum(["image","video"]),storageKey:z.string().t
 const saleBody=z.object({buyerCustomerId:uuid,salePriceCents:z.number().int().positive()});
 const deliveryBody=z.object({plannedAt:z.string().datetime({offset:true})});
 const completeDeliveryBody=z.object({handoverOdometerKm:z.number().int().min(0),notes:z.string().trim().max(2000).optional()});
+const transferBody=z.object({documentIds:z.array(uuid).min(1)});
 
 export function registerVehicleCommerceRoutes(app:FastifyInstance,contexts:RequestContextResolver,authorizer:RouteAuthorizer,commerce:ManageVehicleCommerce):void{
   app.post("/v1/vehicle-stock",async request=>{const context=await contexts.resolve(request);const body=acquisition.parse(request.body);await authorizer.require(context,"commerce.manage",{organizationId:body.organizationId as EntityId,siteId:body.siteId as EntityId});return commerce.acquire(context,{...body,organizationId:body.organizationId as EntityId,siteId:body.siteId as EntityId,assetId:body.assetId as EntityId});});
@@ -28,4 +29,5 @@ export function registerVehicleCommerceRoutes(app:FastifyInstance,contexts:Reque
   app.post("/v1/vehicle-stock/:id/sale",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params),body=saleBody.parse(request.body);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.sell(context,params.id as EntityId,{buyerCustomerId:body.buyerCustomerId as EntityId,salePriceCents:body.salePriceCents});});
   app.post("/v1/vehicle-stock/:id/delivery",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params),body=deliveryBody.parse(request.body);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.scheduleDelivery(context,params.id as EntityId,body.plannedAt);});
   app.post("/v1/vehicle-stock/:id/delivery/complete",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params),body=completeDeliveryBody.parse(request.body);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.completeDelivery(context,params.id as EntityId,body);});
+  app.post("/v1/vehicle-stock/:id/ownership-transfer",async request=>{const context=await contexts.resolve(request);const params=idParams.parse(request.params),body=transferBody.parse(request.body);await authorizer.require(context,"commerce.manage",await commerce.scope(context,params.id as EntityId));return commerce.transferOwnership(context,params.id as EntityId,body.documentIds as EntityId[]);});
 }

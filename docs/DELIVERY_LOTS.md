@@ -10,6 +10,7 @@ Chaque lot livre une capacité exploitable. P0 désigne le pilote, pas la limite
 | 3 — CRM & workflows | Leads, opportunités, tâches, pipelines configurables, modèles, automatisations, messagerie | 1 | workflow vente et workflow atelier configurés sans code spécifique |
 | 4 — Atelier & interventions | Planning, ordres de réparation, diagnostic, devis, validation, pièces, temps, contrôle qualité | 1,2,3 | parcours demande → OR → facture → historique passeport complet |
 | 5 — Commerce véhicules | Stock, reprise, achat, préparation, annonce, vente classique, flash, enchères, livraison | 1,3 | stock publié une fois vers surface pro et plateforme centrale |
+| 5E — Transfert de propriété | Après remise, mutation atomique du propriétaire de l'actif et du passeport, preuve documentaire, historique et événement outbox | 5D,2C | une cession livrée transfère une seule fois l'actif et son passeport au bon acheteur avec preuve vérifiable |
 | 6 — Pièces & équipement | Catalogue, compatibilité, fournisseurs, commandes, stock, e-commerce, pose | 1,4 | boucle pièce → intervention → marge et traçabilité |
 | 7 — Finance, documents & conformité | Devis, commandes, factures, paiements, commissions, Cerfa/démarches, signature, preuve | 1,3 | chaîne documentaire et financière auditable de bout en bout |
 | 8 — Fabrique marque blanche | Design tokens, domaines, CMS/SEO, site pro, portail client, configuration PWA/app | 1–7 | une nouvelle marque est créée par configuration, sans fork |
