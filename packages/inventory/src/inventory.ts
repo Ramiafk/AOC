@@ -1,0 +1,7 @@
+import{invariant}from"../../core/src/errors.ts";import{newEntityId,type EntityId,type TenantScoped}from"../../core/src/identity.ts";
+export interface PartProps extends TenantScoped{id:EntityId;organizationId:EntityId;sku:string;name:string;unitCostCents:number;salePriceCents:number;reorderPoint:number;reorderQuantity:number;active:boolean;createdAt:string}
+export class Part{static create(input:Omit<PartProps,"id"|"active"|"createdAt">,now=new Date()):PartProps{invariant(input.sku.trim().length>=2&&input.name.trim().length>=2,"INVALID_PART","Part is invalid");invariant(input.unitCostCents>=0&&input.salePriceCents>=0&&input.reorderPoint>=0&&input.reorderQuantity>0,"INVALID_PART_VALUES","Part values are invalid");return{...input,id:newEntityId(),sku:input.sku.trim().toUpperCase(),name:input.name.trim(),active:true,createdAt:now.toISOString()};}}
+export interface StockPositionProps extends TenantScoped{siteId:EntityId;partId:EntityId;onHand:number;reserved:number;updatedAt:string}
+export interface StockReservationProps extends TenantScoped{id:EntityId;siteId:EntityId;partId:EntityId;workOrderId:EntityId;quantity:number;status:"reserved"|"consumed"|"released";createdAt:string}
+export interface PurchaseOrderProps extends TenantScoped{id:EntityId;organizationId:EntityId;siteId:EntityId;supplierId:EntityId;number:string;lines:readonly{partId:EntityId;quantity:number;unitCostCents:number}[];status:"draft"|"ordered"|"partially_received"|"received"|"cancelled";createdAt:string}
+export const available=(p:StockPositionProps)=>p.onHand-p.reserved;

@@ -1,0 +1,21 @@
+import { Pool } from "pg";
+import { AuditRecorder } from "../../../packages/audit/src/audit.ts";
+import { PostgresAuditSink } from "../../../infrastructure/postgres/postgres-audit-sink.ts";
+import { PostgresPlatformRepository } from "../../../infrastructure/postgres/postgres-platform-repository.ts";
+import { PostgresMembershipRepository } from "../../../infrastructure/postgres/postgres-membership-repository.ts";
+import { PlatformApplication } from "./application.ts";
+import { buildApp } from "./build-app.ts";
+import { OidcTokenVerifier, RequestContextResolver } from "./context-resolver.ts";
+import { RouteAuthorizer } from "./route-authorizer.ts";
+
+if(process.env.NODE_ENV!=="production")throw new Error("Use development-server.ts outside production");
+if(process.env.DEV_ACCESS_TOKEN||process.env.DEV_TENANT_ID||process.env.DEV_ACTOR_ID)throw new Error("DEV_CREDENTIALS_FORBIDDEN_IN_PRODUCTION");
+const databaseUrl=process.env.DATABASE_URL,issuer=process.env.OIDC_ISSUER,audience=process.env.OIDC_AUDIENCE,jwks=process.env.OIDC_JWKS_URL;
+if(!databaseUrl||!issuer||!audience||!jwks)throw new Error("DATABASE_URL, OIDC_ISSUER, OIDC_AUDIENCE and OIDC_JWKS_URL are required");
+const pool=new Pool({connectionString:databaseUrl,max:Number(process.env.DATABASE_POOL_SIZE??10)});
+const membershipRepository=new PostgresMembershipRepository(pool);
+const application=new PlatformApplication(new PostgresPlatformRepository(pool),new AuditRecorder(new PostgresAuditSink(pool)));
+const contexts=new RequestContextResolver(new OidcTokenVerifier({issuer,audience,jwksUrl:new URL(jwks)}));
+const app=buildApp({application,contexts,authorizer:new RouteAuthorizer(membershipRepository),modules:{}});
+const close=async()=>{await app.close();await pool.end();};process.once("SIGTERM",close);process.once("SIGINT",close);
+await app.listen({host:process.env.HOST??"0.0.0.0",port:Number(process.env.PORT??3000)});
