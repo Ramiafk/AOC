@@ -53,3 +53,4 @@ Une réservation conserve toujours son canal d'origine (`central_marketplace`, `
 | 5A — Stock véhicules | Terminé | acquisition, préparation, prix et publication séparée vers les canaux directs ou la plateforme centrale |
 | 5B — Merchandising véhicule | Terminé | checklist obligatoire, image principale et préparation auditable avant publication |
 | 5C — Vente véhicule | Terminé | vente verrouillée, marge brute, retrait atomique des annonces et événement outbox |
+| 5D — Livraison véhicule | Terminé | planification unique, remise auditable, kilométrage et événement outbox atomique |
