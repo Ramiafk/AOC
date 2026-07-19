@@ -2,7 +2,7 @@ import { invariant } from "../../core/src/errors.ts";
 import { newEntityId, type EntityId, type RequestContext, type TenantId, type TenantScoped } from "../../core/src/identity.ts";
 
 export type AcquisitionMode = "purchase" | "trade_in" | "consignment";
-export type VehicleStockStatus = "acquired" | "preparing" | "ready" | "published" | "withdrawn" | "sold";
+export type VehicleStockStatus = "acquired" | "preparing" | "ready" | "published" | "withdrawn" | "sold" | "delivered";
 export type PublicationChannel = "professional_website" | "professional_app" | "central_marketplace";
 
 export interface VehicleStockItemProps extends TenantScoped { id: EntityId; organizationId: EntityId; siteId: EntityId; assetId: EntityId; acquisitionMode: AcquisitionMode; acquisitionCostCents: number; askingPriceCents?: number | undefined; status: VehicleStockStatus; createdBy: EntityId; createdAt: string; updatedAt: string }
@@ -10,11 +10,14 @@ export interface VehiclePublicationProps extends TenantScoped { id: EntityId; or
 export interface VehiclePreparationCheckProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; label:string; required:boolean; completedBy?:EntityId|undefined; completedAt?:string|undefined; createdAt:string }
 export interface VehicleMediaProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; kind:"image"|"video"; storageKey:string; position:number; primary:boolean; createdBy:EntityId; createdAt:string }
 export interface VehicleSaleProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; buyerCustomerId:EntityId; salePriceCents:number; acquisitionCostCents:number; grossMarginCents:number; soldBy:EntityId; soldAt:string }
+export interface VehicleDeliveryProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; saleId:EntityId; status:"scheduled"|"completed"; plannedAt:string; handoverOdometerKm?:number|undefined; notes?:string|undefined; scheduledBy:EntityId; completedBy?:EntityId|undefined; completedAt?:string|undefined; createdAt:string }
 
 export interface VehicleCommerceRepository {
   assetExists(tenantId: TenantId, assetId: EntityId): Promise<boolean>;
   siteBelongsToOrganization(tenantId: TenantId, organizationId: EntityId, siteId: EntityId): Promise<boolean>;
   customerExists(tenantId:TenantId,customerId:EntityId):Promise<boolean>;
+  findSale(tenantId:TenantId,stockItemId:EntityId):Promise<Readonly<VehicleSaleProps>|null>;
+  findDelivery(tenantId:TenantId,stockItemId:EntityId):Promise<Readonly<VehicleDeliveryProps>|null>;
   saveStockItem(value: Readonly<VehicleStockItemProps>): Promise<void>;
   findStockItem(tenantId: TenantId, id: EntityId): Promise<Readonly<VehicleStockItemProps> | null>;
   listPublications(tenantId: TenantId, stockItemId: EntityId): Promise<readonly Readonly<VehiclePublicationProps>[]>;
@@ -26,6 +29,8 @@ export interface VehicleCommerceRepository {
   publish(value: Readonly<VehiclePublicationProps>, stockItem: Readonly<VehicleStockItemProps>): Promise<void>;
   markReady(stockItem:Readonly<VehicleStockItemProps>,readyBy:EntityId):Promise<void>;
   sell(value:Readonly<VehicleSaleProps>,stockItem:Readonly<VehicleStockItemProps>):Promise<void>;
+  saveDelivery(value:Readonly<VehicleDeliveryProps>):Promise<void>;
+  completeDelivery(value:Readonly<VehicleDeliveryProps>,stockItem:Readonly<VehicleStockItemProps>):Promise<void>;
 }
 
 export class ManageVehicleCommerce {
@@ -60,6 +65,8 @@ export class ManageVehicleCommerce {
   }
 
   async sell(context:RequestContext,id:EntityId,input:{buyerCustomerId:EntityId;salePriceCents:number}){invariant(input.salePriceCents>0,"INVALID_SALE_PRICE","Sale price must be positive");return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const item=await this.item(context.tenantId,id,repository);invariant(item.status==="published","STOCK_ITEM_NOT_SELLABLE","Only a published vehicle can be sold");invariant(await repository.customerExists(context.tenantId,input.buyerCustomerId),"BUYER_NOT_FOUND","Buyer was not found");const soldAt=this.now().toISOString(),sale:VehicleSaleProps={id:newEntityId(),tenantId:context.tenantId,organizationId:item.organizationId,siteId:item.siteId,stockItemId:item.id,buyerCustomerId:input.buyerCustomerId,salePriceCents:input.salePriceCents,acquisitionCostCents:item.acquisitionCostCents,grossMarginCents:input.salePriceCents-item.acquisitionCostCents,soldBy:context.actorId,soldAt},next={...item,status:"sold" as const,updatedAt:soldAt};await repository.sell(sale,next);return{sale,stockItem:next};});}
+  async scheduleDelivery(context:RequestContext,id:EntityId,plannedAt:string){const planned=new Date(plannedAt);invariant(!Number.isNaN(planned.getTime()),"INVALID_DELIVERY_DATE","Delivery date is invalid");return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const item=await this.item(context.tenantId,id,repository);invariant(item.status==="sold","STOCK_ITEM_NOT_SOLD","Only a sold vehicle can be scheduled for delivery");const sale=await repository.findSale(context.tenantId,id);invariant(sale,"SALE_NOT_FOUND","Vehicle sale was not found");invariant(!(await repository.findDelivery(context.tenantId,id)),"DELIVERY_ALREADY_SCHEDULED","Delivery is already scheduled");const now=this.now().toISOString(),delivery:VehicleDeliveryProps={id:newEntityId(),tenantId:context.tenantId,organizationId:item.organizationId,siteId:item.siteId,stockItemId:id,saleId:sale.id,status:"scheduled",plannedAt:planned.toISOString(),scheduledBy:context.actorId,createdAt:now};await repository.saveDelivery(delivery);return delivery;});}
+  async completeDelivery(context:RequestContext,id:EntityId,input:{handoverOdometerKm:number;notes?:string|undefined}){invariant(Number.isInteger(input.handoverOdometerKm)&&input.handoverOdometerKm>=0,"INVALID_HANDOVER_ODOMETER","Handover odometer is invalid");return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const item=await this.item(context.tenantId,id,repository);invariant(item.status==="sold","STOCK_ITEM_NOT_DELIVERABLE","Only a sold vehicle can be delivered");const current=await repository.findDelivery(context.tenantId,id);invariant(current&&current.status==="scheduled","DELIVERY_NOT_SCHEDULED","Delivery is not scheduled");const completedAt=this.now().toISOString(),delivery:VehicleDeliveryProps={...current,status:"completed",handoverOdometerKm:input.handoverOdometerKm,notes:input.notes?.trim()||undefined,completedBy:context.actorId,completedAt},next={...item,status:"delivered" as const,updatedAt:completedAt};await repository.completeDelivery(delivery,next);return{delivery,stockItem:next};});}
 
   async scope(context: RequestContext,id:EntityId){const value=await this.item(context.tenantId,id);return{organizationId:value.organizationId,siteId:value.siteId};}
   private async transition(context:RequestContext,id:EntityId,from:VehicleStockStatus,to:VehicleStockStatus,code:string){const value=await this.item(context.tenantId,id);invariant(value.status===from,code,"Vehicle stock transition is not allowed");const next={...value,status:to,updatedAt:this.now().toISOString()};await this.repository.saveStockItem(next);return next;}

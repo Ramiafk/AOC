@@ -124,11 +124,23 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     assert.equal((await adminPool.query("SELECT gross_margin_cents FROM vehicle_sales WHERE tenant_id=$1 AND stock_item_id=$2",[t1,stockItem.id])).rows[0].gross_margin_cents,300000);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_publications WHERE tenant_id=$1 AND stock_item_id=$2 AND status='published'",[t1,stockItem.id])).rows[0].count,0);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM outbox_events WHERE tenant_id=$1 AND event_type='commerce.vehicle_sold.v1' AND payload->>'stockItemId'=$2",[t1,stockItem.id])).rows[0].count,1);
+    const deliveryResults=await Promise.allSettled([
+      commerce.scheduleDelivery(context,stockItem.id,"2026-07-24T09:00:00Z"),
+      commerce.scheduleDelivery(context,stockItem.id,"2026-07-25T09:00:00Z")
+    ]);
+    assert.equal(deliveryResults.filter(result=>result.status==="fulfilled").length,1);
+    const delivered=await commerce.completeDelivery(context,stockItem.id,{handoverOdometerKm:41200,notes:"Two keys handed over"});
+    assert.equal(delivered.stockItem.status,"delivered");
+    assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_deliveries WHERE tenant_id=$1 AND stock_item_id=$2 AND status='completed'",[t1,stockItem.id])).rows[0].count,1);
+    assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM outbox_events WHERE tenant_id=$1 AND event_type='commerce.vehicle_delivered.v1' AND payload->>'stockItemId'=$2",[t1,stockItem.id])).rows[0].count,1);
     assert.equal(await commerceRepository.findStockItem(tenantId(t2),stockItem.id),null);
     const scopeTestStock=await commerce.acquire(context,{organizationId,siteId,assetId:otherAssetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});
     await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_stock_items(id,tenant_id,organization_id,site_id,asset_id,acquisition_mode,acquisition_cost_cents,status,created_by,created_at,updated_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,'purchase',100,'acquired',$5,now(),now())`,[t1,organizationId,otherSiteId,otherAssetId,context.actorId]),/vehicle_stock_tenant_organization_site_fk/);
     await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_publications(id,tenant_id,organization_id,site_id,stock_item_id,channel,asking_price_cents,status,published_by,published_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,'professional_website',1590000,'published',$5,now())`,[t1,otherOrganizationId,otherSiteId,stockItem.id,context.actorId]),/vehicle_publications_tenant_stock_scope_fk/);
     await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_sales(id,tenant_id,organization_id,site_id,stock_item_id,buyer_customer_id,sale_price_cents,acquisition_cost_cents,gross_margin_cents,sold_by,sold_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,$5,1500000,1000000,500000,$6,now())`,[t1,otherOrganizationId,otherSiteId,scopeTestStock.id,customerId,context.actorId]),/vehicle_sales_stock_scope_fk/);
+    const scopeSaleId=newEntityId();
+    await adminPool.query(`INSERT INTO vehicle_sales(id,tenant_id,organization_id,site_id,stock_item_id,buyer_customer_id,sale_price_cents,acquisition_cost_cents,gross_margin_cents,sold_by,sold_at) VALUES($1,$2,$3,$4,$5,$6,1500000,1000000,500000,$7,now())`,[scopeSaleId,t1,organizationId,siteId,scopeTestStock.id,customerId,context.actorId]);
+    await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_deliveries(id,tenant_id,organization_id,site_id,stock_item_id,sale_id,status,planned_at,scheduled_by,created_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,$5,'scheduled',now(),$6,now())`,[t1,otherOrganizationId,otherSiteId,scopeTestStock.id,scopeSaleId,context.actorId]),/vehicle_deliveries_sale_scope_fk/);
   } finally {
     if(applicationPool) await applicationPool.end();
     await adminPool.query(`DROP OWNED BY ${role}`).catch(()=>undefined);
