@@ -174,25 +174,31 @@ L'agent doit toujours fournir :
 - Centraliser plusieurs domaines dans un seul route registry ou service géant.
 - Modifier ou supprimer l'historique des migrations déjà publiées.
 
-## 13. Cadence minimale : plusieurs lots par session
+## 13. Fonctionnement séquentiel obligatoire : un lot à la fois
 
-Chaque session de développement demandée doit représenter au minimum **60 minutes de travail technique actif et utile**.
+Le développement reprend un fonctionnement strictement séquentiel, lot par lot.
 
-L'objectif n'est pas de faire durer artificiellement un seul petit lot pendant une heure. L'agent doit enchaîner **plusieurs lots ou sous-lots réellement terminés** pendant la même session, autant que la qualité le permet.
+- Prendre uniquement le prochain lot prioritaire du Blueprint ou de `docs/DELIVERY_LOTS.md`.
+- Créer une branche dédiée à ce seul lot.
+- Développer uniquement ce lot jusqu'à sa Definition of Done locale.
+- Ajouter le code, les tests, les migrations éventuelles, la documentation et la mise à jour du suivi.
+- Ouvrir une PR brouillon dédiée à ce seul lot.
+- Attendre que la CI soit verte sur le commit final.
+- Demander explicitement la revue CTO.
+- Ne pas commencer le lot suivant avant la décision CTO explicite et la fusion du lot courant dans `main`.
+- En cas de demande de corrections CTO, corriger la même branche et la même PR, relancer les validations puis redemander une revue.
+- Après approbation CTO, sortir la PR du mode brouillon, la fusionner, repartir de `main` à jour et seulement alors créer la branche du lot suivant.
 
-- Commencer par le prochain lot prioritaire du Blueprint ou de `docs/DELIVERY_LOTS.md`.
-- Dès qu'un lot atteint sa Definition of Done locale, créer son commit, sa branche et sa PR brouillon dédiés, puis passer immédiatement au lot suivant sans attendre la revue CTO.
-- Chaque lot doit conserver sa propre branche et sa propre PR. Ne jamais regrouper plusieurs objectifs indépendants dans une seule PR.
-- Lorsqu'un lot suivant dépend d'un lot encore non fusionné, créer une branche empilée depuis la branche précédente et indiquer clairement cette dépendance dans la PR. Après fusion du lot parent, rebaser ou retargeter proprement la PR dépendante vers `main`.
-- Privilégier des lots successifs cohérents dans la roadmap, mais conserver une séparation stricte des PR, migrations, tests et documentations.
-- Continuer à développer et ouvrir des PR brouillon jusqu'à avoir accompli au moins 60 minutes de travail réel.
-- Si les lots sont courts, en livrer plusieurs dans la même session plutôt que de gonfler artificiellement leur périmètre.
-- Si, au terme des 60 minutes, le lot actuellement commencé n'est pas terminé, continuer jusqu'à sa Definition of Done avant d'arrêter.
-- Ne jamais interrompre un lot à moitié uniquement parce que les 60 minutes sont écoulées.
-- Ne demander une revue CTO pour chaque PR qu'une fois sa CI verte et tous ses livrables présents.
-- Le compte rendu final de session doit lister tous les lots traités, leurs branches, commits, PR, dépendances éventuelles, validations CI et limites restantes.
+Il est interdit de :
 
-Il est interdit de simuler une durée, d'attendre passivement, d'ajouter du code inutile ou de fusionner plusieurs lots indépendants dans une seule PR pour atteindre 60 minutes.
+- développer plusieurs lots en parallèle ;
+- ouvrir plusieurs PR de lots simultanément ;
+- créer des branches empilées ;
+- commencer un lot dépendant d'une PR non fusionnée ;
+- mélanger plusieurs objectifs indépendants dans une seule PR ;
+- continuer automatiquement sur un autre lot pendant l'attente de la revue CTO.
+
+La priorité est la fiabilité du cycle complet : **un lot → une branche → une PR → une CI verte → une décision CTO → une fusion → le lot suivant**.
 
 ## 14. Definition of Done
 
