@@ -20,9 +20,11 @@ test("refuses an activity not enabled at organization level", () => {
 
 test("enforces tenant, permission and site scopes", () => {
   const siteId = newEntityId();
-  const membership = Membership.create({ tenantId: tenant, organizationId: newEntityId(), userId: newEntityId(), role: "technician", siteIds: [siteId], extraPermissions: [] }).snapshot();
-  authorize(membership, tenant, "workshop.manage", siteId);
-  assert.throws(() => authorize(membership, tenant, "billing.manage", siteId), (error: unknown) => error instanceof DomainError && error.code === "PERMISSION_DENIED");
-  assert.throws(() => authorize(membership, tenant, "workshop.manage", newEntityId()), (error: unknown) => error instanceof DomainError && error.code === "SITE_ACCESS_DENIED");
-  assert.throws(() => authorize(membership, tenantId("22222222-2222-4222-8222-222222222222"), "workshop.manage", siteId), (error: unknown) => error instanceof DomainError && error.code === "TENANT_ACCESS_DENIED");
+  const organizationId=newEntityId();
+  const membership = Membership.create({ tenantId: tenant, organizationId, userId: newEntityId(), role: "technician", siteIds: [siteId], extraPermissions: [] }).snapshot();
+  authorize(membership, tenant, "workshop.manage", {organizationId,siteId});
+  assert.throws(() => authorize(membership, tenant, "billing.manage", {organizationId,siteId}), (error: unknown) => error instanceof DomainError && error.code === "PERMISSION_DENIED");
+  assert.throws(() => authorize(membership, tenant, "workshop.manage", {organizationId,siteId:newEntityId()}), (error: unknown) => error instanceof DomainError && error.code === "SITE_ACCESS_DENIED");
+  assert.throws(() => authorize(membership, tenant, "workshop.manage", {organizationId:newEntityId(),siteId}), (error: unknown) => error instanceof DomainError && error.code === "ORGANIZATION_ACCESS_DENIED");
+  assert.throws(() => authorize(membership, tenantId("22222222-2222-4222-8222-222222222222"), "workshop.manage", {organizationId,siteId}), (error: unknown) => error instanceof DomainError && error.code === "TENANT_ACCESS_DENIED");
 });

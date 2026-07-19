@@ -1,0 +1,174 @@
+import Fastify, { type FastifyInstance } from "fastify";
+import { z } from "zod";
+import { DomainError } from "../../../packages/core/src/errors.ts";
+import type { EntityId } from "../../../packages/core/src/identity.ts";
+import { BUSINESS_ACTIVITIES, type BusinessActivity } from "../../../packages/organizations/src/organization.ts";
+import type { PlatformApplication } from "./application.ts";
+import type { RequestContextResolver } from "./context-resolver.ts";
+import type { RouteAuthorizer } from "./route-authorizer.ts";
+import type { ManageMemberships } from "../../../packages/organizations/src/manage-memberships.ts";
+import type { ManageBookings } from "../../../packages/booking/src/manage-bookings.ts";
+import type { BookingChannel, PriceMode } from "../../../packages/booking/src/booking.ts";
+import type { ManagePassports } from "../../../packages/passport/src/manage-passports.ts";
+import type { DeadlineType, EntryVisibility, PassportEntryType, QrPurpose } from "../../../packages/passport/src/passport.ts";
+import type { ManageDocuments } from "../../../packages/documents/src/manage-documents.ts";
+import type { ConsentPurpose, ConsentScope, DocumentClassification, DocumentKind } from "../../../packages/documents/src/documents.ts";
+import type { ManageCrm } from "../../../packages/crm/src/manage-crm.ts";
+import type { RequestKind } from "../../../packages/crm/src/crm.ts";
+import type { ManageNotifications } from "../../../packages/notifications/src/manage-notifications.ts";
+import type { NotificationChannel, NotificationTopic } from "../../../packages/notifications/src/notification.ts";
+import type { ManageWorkflows } from "../../../packages/workflows/src/manage-workflows.ts";
+import type { WorkflowPriority } from "../../../packages/workflows/src/workflow.ts";
+import type { ManageQuotes } from "../../../packages/quotes/src/manage-quotes.ts";
+import type { QuoteLineKind } from "../../../packages/quotes/src/quote.ts";
+import type { ManageFinance } from "../../../packages/finance/src/manage-finance.ts";
+import type { PaymentProps } from "../../../packages/finance/src/finance.ts";
+import type { ManageWorkshop } from "../../../packages/workshop/src/manage-workshop.ts";
+
+const uuid = z.string().uuid();
+const activity = z.string().refine(value => BUSINESS_ACTIVITIES.includes(value as never) || value.startsWith("custom:"));
+const organizationBody = z.object({ legalName: z.string().min(2), displayName: z.string().min(2), countryCode: z.string().regex(/^[A-Z]{2}$/), activities: z.array(activity).min(1) });
+const siteBody = z.object({ organizationId: uuid, name: z.string().min(2), countryCode: z.string().regex(/^[A-Z]{2}$/), timezone: z.string().min(3), activities: z.array(activity).min(1) });
+const customerBody = z.object({ kind: z.enum(["individual", "business"]), displayName: z.string().min(2), email: z.email().optional(), phone: z.string().min(6).optional(), acquisitionChannel: z.enum(["central_marketplace", "professional_app", "professional_website", "staff", "partner", "api"]), acquisitionOwnerOrganizationId: uuid.optional() });
+const assetBody = z.object({ ownerCustomerId: uuid, kind: z.string().min(1), registration: z.string().min(1).optional(), vinOrSerial: z.string().min(1).optional(), manufacturer: z.string().optional(), model: z.string().optional(), attributes: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional() });
+const invitationBody = z.object({ organizationId: uuid, email: z.email(), role: z.enum(["owner", "admin", "manager", "advisor", "technician", "accountant", "viewer"]), siteIds: z.array(uuid), extraPermissions: z.array(z.enum(["organization.manage", "members.manage", "customers.read", "customers.write", "assets.read", "assets.write", "appointments.manage", "workshop.manage", "commerce.manage", "parts.manage", "billing.manage", "audit.read"])).optional() });
+const acceptInvitationBody = z.object({ token: z.string().min(32) });
+const offeringBody = z.object({ organizationId: uuid, siteId: uuid, activity: z.string().min(2), name: z.string().min(2), durationMinutes: z.number().int().min(5).max(1440), bufferMinutes: z.number().int().min(0).max(240).default(0), capacity: z.number().int().min(1).default(1), priceMode: z.enum(["fixed", "from", "quote"]), priceCents: z.number().int().min(0).optional(), currency: z.string().regex(/^[A-Z]{3}$/), publishedChannels: z.array(z.enum(["central_marketplace", "professional_app", "professional_website", "staff", "partner", "api"])).min(1) });
+const slotBody = z.object({ offeringId: uuid, startsAt: z.iso.datetime(), capacity: z.number().int().min(1).optional() });
+const bookingBody = z.object({ slotId: uuid, customerId: uuid, assetId: uuid.optional(), channel: z.enum(["central_marketplace", "professional_app", "professional_website", "staff", "partner", "api"]), acquisitionOwnerOrganizationId: uuid.optional(), marketplaceCommissionBasisPoints: z.number().int().min(0).max(10000).optional() });
+const passportBody=z.object({assetId:uuid,ownerCustomerId:uuid});
+const passportEntryBody=z.object({passportId:uuid,assetId:uuid,type:z.enum(["maintenance","repair","inspection","body_work","tyres","battery","ownership","document","custom"]),title:z.string().min(2),occurredAt:z.iso.datetime(),mileage:z.number().int().min(0).optional(),providerOrganizationId:uuid.optional(),documentIds:z.array(uuid).default([]),visibility:z.enum(["owner_only","shared_professionals","resale_public"])});
+const deadlineBody=z.object({passportId:uuid,assetId:uuid,type:z.enum(["maintenance","technical_inspection","insurance","warranty","registration","lease","custom"]),label:z.string().min(2),dueAt:z.iso.datetime(),dueMileage:z.number().int().min(0).optional(),sourceEntryId:uuid.optional()});
+const qrBody=z.object({passportId:uuid,purpose:z.enum(["owner_portal","booking","service_intake","resale_view"]),ttlMinutes:z.number().int().min(5).max(525600),maxUses:z.number().int().min(1).max(10000)});
+const documentBody=z.object({ownerCustomerId:uuid,assetId:uuid.optional(),passportId:uuid.optional(),kind:z.enum(["invoice","quote","work_order","inspection_report","registration","insurance","warranty","photo","identity","other"]),name:z.string().min(2),mimeType:z.string().min(3),sizeBytes:z.number().int().positive().max(104857600),contentHash:z.string().regex(/^[a-f0-9]{64}$/i),storageKey:z.string().min(3),classification:z.enum(["private","customer_shared","professional_shared","resale_public"]),retentionUntil:z.iso.datetime().optional()});
+const consentBody=z.object({customerId:uuid,granteeOrganizationId:uuid,purpose:z.enum(["service_delivery","diagnosis","insurance_claim","vehicle_sale","fleet_management","legal_obligation"]),scopes:z.array(z.enum(["passport_summary","maintenance_history","documents","contact_details","vehicle_data"])).min(1),assetIds:z.array(uuid).min(1),expiresAt:z.iso.datetime()});
+const shareBody=z.object({documentId:uuid,issuedToCustomerId:uuid.optional(),issuedToOrganizationId:uuid.optional(),maxDownloads:z.number().int().min(1).max(100),ttlMinutes:z.number().int().min(5).max(43200)});
+const pipelineStageBody=z.object({key:z.string().min(1),label:z.string().min(2),order:z.number().int().min(0),terminal:z.enum(["won","lost"]).optional(),requiredFields:z.array(z.string().min(1)).optional()});
+const pipelineBody=z.object({organizationId:uuid,activity:z.string().min(2),name:z.string().min(2),stages:z.array(pipelineStageBody).min(2)});
+const opportunityBody=z.object({organizationId:uuid,siteId:uuid,pipelineId:uuid,kind:z.enum(["service_quote","diagnostic","appointment","vehicle_purchase","vehicle_sale","rental","parts","body_shop","transport","other"]),title:z.string().min(2),customerId:uuid,assetId:uuid.optional(),channel:z.enum(["central_marketplace","professional_app","professional_website","staff","partner","api"]),acquisitionOwnerOrganizationId:uuid.optional(),assignedTo:uuid.optional(),estimatedValueCents:z.number().int().min(0).optional(),currency:z.string().regex(/^[A-Z]{3}$/),metadata:z.record(z.string(),z.union([z.string(),z.number(),z.boolean()])).default({})});
+const opportunityMoveBody=z.object({stageKey:z.string().min(1),providedFields:z.array(z.string().min(1)).default([])});
+const opportunityLostBody=z.object({reason:z.string().min(2)});
+const notificationChannel=z.enum(["email","sms","push","in_app"]);
+const notificationTopic=z.enum(["appointment","service","document","passport","security","marketing"]);
+const notificationTemplateBody=z.object({organizationId:uuid,key:z.string().min(2),locale:z.string().min(2),channel:notificationChannel,topic:notificationTopic,subject:z.string().min(1).optional(),body:z.string().min(2)});
+const notificationPreferenceBody=z.object({customerId:uuid,topic:notificationTopic,enabledChannels:z.array(notificationChannel),marketingConsent:z.boolean(),locale:z.string().min(2),timezone:z.string().min(3)});
+const queueNotificationBody=z.object({organizationId:uuid,customerId:uuid,templateKey:z.string().min(2),topic:notificationTopic,locale:z.string().min(2),channels:z.array(notificationChannel).min(1),addresses:z.object({email:z.email().optional(),sms:z.string().min(6).optional(),push:z.string().min(8).optional()}),variables:z.record(z.string(),z.union([z.string(),z.number()])),brand:z.object({name:z.string().min(2),primaryColor:z.string().regex(/^#[0-9a-f]{6}$/i)}),idempotencyKey:z.string().min(3).max(200)});
+const workflowStepBody=z.object({key:z.string().min(1),label:z.string().min(2),order:z.number().int().min(0),terminal:z.boolean().optional(),requiredFields:z.array(z.string()).optional(),defaultRole:z.string().min(1).optional(),slaMinutes:z.number().int().positive().optional()});
+const workflowDefinitionBody=z.object({organizationId:uuid,activity:z.string().min(2),key:z.string().min(2),name:z.string().min(2),steps:z.array(workflowStepBody).min(2)});
+const workflowStartBody=z.object({organizationId:uuid,siteId:uuid,definitionId:uuid,subjectType:z.string().min(2),subjectId:uuid,priority:z.enum(["low","normal","high","urgent"]),data:z.record(z.string(),z.union([z.string(),z.number(),z.boolean()])).default({})});
+const workflowTransitionBody=z.object({to:z.string().min(1),expectedVersion:z.number().int().positive(),fields:z.record(z.string(),z.union([z.string(),z.number(),z.boolean()])).default({})});
+const workItemAssignBody=z.object({instanceId:uuid,assignedTo:uuid});
+const quoteLineBody=z.object({kind:z.enum(["labor","part","service","fee"]),reference:z.string().optional(),label:z.string().min(2),quantity:z.number().positive(),unitPriceCents:z.number().int().min(0),unitCostCents:z.number().int().min(0).optional(),discountBasisPoints:z.number().int().min(0).max(10000).optional(),taxRateBasisPoints:z.number().int().min(0).max(10000).optional()});
+const quoteBody=z.object({organizationId:uuid,siteId:uuid,customerId:uuid,assetId:uuid.optional(),opportunityId:uuid.optional(),lines:z.array(quoteLineBody).min(1),policy:z.object({currency:z.string().regex(/^[A-Z]{3}$/),taxRateBasisPoints:z.number().int().min(0).max(10000),maxDiscountBasisPoints:z.number().int().min(0).max(10000),minimumMarginBasisPoints:z.number().int().min(0).max(10000),validityDays:z.number().int().min(1).max(365)}),terms:z.string().min(2)});
+const quoteAcceptBody=z.object({customerId:uuid,expectedTotalCents:z.number().int().min(0),termsHash:z.string().regex(/^[a-f0-9]{64}$/i)});
+const orderBody=z.object({organizationId:uuid,siteId:uuid,customerId:uuid,quoteId:uuid,quoteStatus:z.string(),currency:z.string().regex(/^[A-Z]{3}$/),totalCents:z.number().int().min(0)});
+const invoiceBody=z.object({orderId:uuid,paymentTermsDays:z.number().int().min(0).max(365)});
+const paymentBody=z.object({invoiceId:uuid,provider:z.string().min(1),providerReference:z.string().min(1),idempotencyKey:z.string().min(3),amountCents:z.number().int().positive(),currency:z.string().regex(/^[A-Z]{3}$/),method:z.enum(["card","bank_transfer","cash","cheque","financing","other"])});
+const workOrderBody=z.object({organizationId:uuid,siteId:uuid,customerId:uuid,assetId:uuid,bookingId:uuid.optional(),quoteId:uuid.optional(),checkIn:z.object({mileage:z.number().int().min(0),fuelLevelPercent:z.number().min(0).max(100),customerConcerns:z.array(z.string().min(2)).min(1),damageNotes:z.string().optional(),photoDocumentIds:z.array(uuid).default([]),keysReceived:z.number().int().min(0)})});
+const workshopJobBody=z.object({label:z.string().min(2),kind:z.enum(["labor","diagnostic","service"]),estimatedMinutes:z.number().int().positive(),approvalRequired:z.boolean(),diagnosis:z.string().optional(),technicianId:uuid.optional()});
+const workshopAuthorizeBody=z.object({jobIds:z.array(uuid).min(1)}),workshopStartBody=z.object({jobId:uuid,technicianId:uuid}),workshopTimeBody=z.object({jobId:uuid,minutes:z.number().int().positive()}),workshopCompleteBody=z.object({jobId:uuid,diagnosis:z.string().optional()}),workshopQualityBody=z.object({notes:z.string().min(2)});
+
+export interface ApiModules {
+  memberships?: ManageMemberships;
+  bookings?: ManageBookings;
+  passports?: ManagePassports;
+  documents?: ManageDocuments;
+  crm?: ManageCrm;
+  notifications?: ManageNotifications;
+  workflows?: ManageWorkflows;
+  quotes?: ManageQuotes;
+  finance?: ManageFinance;
+  workshop?: ManageWorkshop;
+}
+
+export interface ApiComposition {
+  application: PlatformApplication;
+  contexts: RequestContextResolver;
+  authorizer: RouteAuthorizer;
+  modules?: ApiModules;
+}
+
+export function buildRouteRegistry({ application, contexts, authorizer, modules = {} }: ApiComposition): FastifyInstance {
+  const { memberships, bookings, passports, documents, crm, notifications, workflows, quotes, finance, workshop } = modules;
+  const app = Fastify({ logger: false });
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof z.ZodError) return reply.status(400).send({ error: "INVALID_REQUEST", details: error.issues });
+    if (error instanceof DomainError) {
+      const status = error.code.includes("AUTH") || error.code === "INVALID_TOKEN" ? 401 : error.code.includes("DENIED") ? 403 : 422;
+      return reply.status(status).send({ error: error.code, message: error.message });
+    }
+    if (error instanceof Error && error.message === "ORGANIZATION_NOT_FOUND") return reply.status(404).send({ error: error.message });
+    return reply.status(500).send({ error: "INTERNAL_ERROR" });
+  });
+
+  app.get("/health", async () => ({ status: "ok" }));
+  app.post("/v1/organizations", async request => { const context = await contexts.resolve(request); await authorizer.require(context, "organization.manage"); return application.createOrganization(context, organizationBody.parse(request.body) as { legalName: string; displayName: string; countryCode: string; activities: BusinessActivity[] }); });
+  app.post("/v1/sites", async request => { const context = await contexts.resolve(request); const body = siteBody.parse(request.body); await authorizer.require(context, "organization.manage", {organizationId:body.organizationId as EntityId}); return application.createSite(context, { ...body, organizationId: body.organizationId as EntityId, activities: body.activities as BusinessActivity[] }); });
+  app.post("/v1/customers", async request => { const context = await contexts.resolve(request); await authorizer.require(context, "customers.write"); const body = customerBody.parse(request.body); return application.createCustomer(context, { ...body, acquisitionOwnerOrganizationId: body.acquisitionOwnerOrganizationId as EntityId | undefined }); });
+  app.post("/v1/assets", async request => { const context = await contexts.resolve(request); await authorizer.require(context, "assets.write"); const body = assetBody.parse(request.body); return application.createAsset(context, { ...body, ownerCustomerId: body.ownerCustomerId as EntityId, kind: body.kind as `custom:${string}` }); });
+  if (memberships) {
+    app.post("/v1/membership-invitations", async request => { const context = await contexts.resolve(request); const body = invitationBody.parse(request.body); await authorizer.require(context, "members.manage", {organizationId:body.organizationId as EntityId}); const invitation = await memberships.invite(context, { ...body, organizationId: body.organizationId as EntityId, siteIds: body.siteIds as EntityId[] }); return { id: invitation.id, email: invitation.email, role: invitation.role, siteIds: invitation.siteIds, status: invitation.status, expiresAt: invitation.expiresAt }; });
+    app.post("/v1/membership-invitations/accept", async request => { const context = await contexts.resolve(request); const body = acceptInvitationBody.parse(request.body); return memberships.accept(context, body.token); });
+  }
+  if (bookings) {
+    app.post("/v1/service-offerings", async request => { const context = await contexts.resolve(request); const body = offeringBody.parse(request.body); await authorizer.require(context, "appointments.manage", {organizationId:body.organizationId as EntityId,siteId:body.siteId as EntityId}); return bookings.createOffering(context, { ...body, organizationId: body.organizationId as EntityId, siteId: body.siteId as EntityId, priceMode: body.priceMode as PriceMode, publishedChannels: body.publishedChannels as BookingChannel[] }); });
+    app.post("/v1/availability-slots", async request => { const context = await contexts.resolve(request); await authorizer.require(context, "appointments.manage"); const body = slotBody.parse(request.body); return bookings.createSlot(context, { ...body, offeringId: body.offeringId as EntityId }); });
+    app.post("/v1/bookings", async request => { const context = await contexts.resolve(request); await authorizer.require(context, "appointments.manage"); const body = bookingBody.parse(request.body); return bookings.book(context, { ...body, slotId: body.slotId as EntityId, customerId: body.customerId as EntityId, assetId: body.assetId as EntityId | undefined, acquisitionOwnerOrganizationId: body.acquisitionOwnerOrganizationId as EntityId | undefined }); });
+    app.post("/v1/bookings/:id/cancel", async request => { const context = await contexts.resolve(request); await authorizer.require(context, "appointments.manage"); const params = z.object({ id: uuid }).parse(request.params); return bookings.cancel(context, params.id as EntityId); });
+  }
+  if(passports){
+    app.post("/v1/passports",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"assets.write");const body=passportBody.parse(request.body);return passports.create(context,{assetId:body.assetId as EntityId,ownerCustomerId:body.ownerCustomerId as EntityId});});
+    app.post("/v1/passport-entries",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"assets.write");const body=passportEntryBody.parse(request.body);return passports.addEntry(context,{...body,passportId:body.passportId as EntityId,assetId:body.assetId as EntityId,type:body.type as PassportEntryType,providerOrganizationId:body.providerOrganizationId as EntityId|undefined,documentIds:body.documentIds as EntityId[],visibility:body.visibility as EntryVisibility});});
+    app.post("/v1/asset-deadlines",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"assets.write");const body=deadlineBody.parse(request.body);return passports.addDeadline(context,{...body,passportId:body.passportId as EntityId,assetId:body.assetId as EntityId,type:body.type as DeadlineType,sourceEntryId:body.sourceEntryId as EntityId|undefined});});
+    app.post("/v1/passport-qr-grants",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"assets.write");const body=qrBody.parse(request.body);return passports.issueQr(context,{...body,passportId:body.passportId as EntityId,purpose:body.purpose as QrPurpose});});
+  }
+  if(documents){
+    app.post("/v1/documents",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"assets.write");const b=documentBody.parse(request.body);return documents.register(context,{...b,ownerCustomerId:b.ownerCustomerId as EntityId,assetId:b.assetId as EntityId|undefined,passportId:b.passportId as EntityId|undefined,kind:b.kind as DocumentKind,classification:b.classification as DocumentClassification});});
+    app.post("/v1/consents",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"customers.write");const b=consentBody.parse(request.body);return documents.grantConsent(context,{...b,customerId:b.customerId as EntityId,granteeOrganizationId:b.granteeOrganizationId as EntityId,purpose:b.purpose as ConsentPurpose,scopes:b.scopes as ConsentScope[],assetIds:b.assetIds as EntityId[]});});
+    app.post("/v1/document-shares",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"assets.read");const b=shareBody.parse(request.body);const issued=await documents.issueShare(context,{...b,documentId:b.documentId as EntityId,issuedToCustomerId:b.issuedToCustomerId as EntityId|undefined,issuedToOrganizationId:b.issuedToOrganizationId as EntityId|undefined});return{id:issued.grant.id,expiresAt:issued.grant.expiresAt,maxDownloads:issued.grant.maxDownloads};});
+  }
+  if(crm){
+    app.post("/v1/crm-pipelines",async request=>{const context=await contexts.resolve(request);const b=pipelineBody.parse(request.body);await authorizer.require(context,"commerce.manage",{organizationId:b.organizationId as EntityId});return crm.createPipeline(context,{...b,organizationId:b.organizationId as EntityId});});
+    app.post("/v1/opportunities",async request=>{const context=await contexts.resolve(request);const b=opportunityBody.parse(request.body);await authorizer.require(context,"customers.write",{organizationId:b.organizationId as EntityId,siteId:b.siteId as EntityId});return crm.createOpportunity(context,{...b,organizationId:b.organizationId as EntityId,siteId:b.siteId as EntityId,pipelineId:b.pipelineId as EntityId,kind:b.kind as RequestKind,customerId:b.customerId as EntityId,assetId:b.assetId as EntityId|undefined,acquisitionOwnerOrganizationId:b.acquisitionOwnerOrganizationId as EntityId|undefined,assignedTo:b.assignedTo as EntityId|undefined});});
+    app.post("/v1/opportunities/:id/move",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"customers.write");const p=z.object({id:uuid}).parse(request.params),b=opportunityMoveBody.parse(request.body);return crm.move(context,p.id as EntityId,b.stageKey,b.providedFields);});
+    app.post("/v1/opportunities/:id/lose",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"customers.write");const p=z.object({id:uuid}).parse(request.params),b=opportunityLostBody.parse(request.body);return crm.lose(context,p.id as EntityId,b.reason);});
+  }
+  if(notifications){
+    app.post("/v1/notification-templates",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"organization.manage");const b=notificationTemplateBody.parse(request.body);return notifications.createTemplate(context,{...b,organizationId:b.organizationId as EntityId,channel:b.channel as NotificationChannel,topic:b.topic as NotificationTopic});});
+    app.put("/v1/notification-preferences",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"customers.write");const b=notificationPreferenceBody.parse(request.body);return notifications.setPreference(context,{...b,customerId:b.customerId as EntityId,topic:b.topic as NotificationTopic,enabledChannels:b.enabledChannels as NotificationChannel[]});});
+    app.post("/v1/notifications",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"customers.write");const b=queueNotificationBody.parse(request.body);return notifications.queue(context,{...b,organizationId:b.organizationId as EntityId,customerId:b.customerId as EntityId,topic:b.topic as NotificationTopic,channels:b.channels as NotificationChannel[]});});
+    app.post("/v1/notifications/:id/dispatch",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"customers.write");const p=z.object({id:uuid}).parse(request.params);return notifications.dispatch(context,p.id as EntityId);});
+    app.get("/v1/customers/:customerId/notifications",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"customers.read");const p=z.object({customerId:uuid}).parse(request.params);return notifications.listForCustomer(context,p.customerId as EntityId);});
+  }
+  if(workflows){
+    app.post("/v1/workflow-definitions",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"organization.manage");const b=workflowDefinitionBody.parse(request.body);return workflows.createDefinition(context,{...b,organizationId:b.organizationId as EntityId});});
+    app.post("/v1/workflows",async request=>{const context=await contexts.resolve(request);const b=workflowStartBody.parse(request.body);await authorizer.require(context,"workshop.manage",{organizationId:b.organizationId as EntityId,siteId:b.siteId as EntityId});return workflows.start(context,{...b,organizationId:b.organizationId as EntityId,siteId:b.siteId as EntityId,definitionId:b.definitionId as EntityId,subjectId:b.subjectId as EntityId,priority:b.priority as WorkflowPriority});});
+    app.post("/v1/workflows/:id/transition",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"workshop.manage");const p=z.object({id:uuid}).parse(request.params),b=workflowTransitionBody.parse(request.body);return workflows.transition(context,p.id as EntityId,b.to,b.expectedVersion,b.fields);});
+    app.post("/v1/work-items/:id/assign",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"workshop.manage");const p=z.object({id:uuid}).parse(request.params),b=workItemAssignBody.parse(request.body);return workflows.assign(context,p.id as EntityId,b.instanceId as EntityId,b.assignedTo as EntityId);});
+    app.get("/v1/work-items",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"workshop.manage");const q=z.object({siteId:uuid.optional(),assignedTo:uuid.optional(),assignedRole:z.string().optional()}).parse(request.query),filters:{siteId?:EntityId;assignedTo?:EntityId;assignedRole?:string}={};if(q.siteId)filters.siteId=q.siteId as EntityId;if(q.assignedTo)filters.assignedTo=q.assignedTo as EntityId;if(q.assignedRole)filters.assignedRole=q.assignedRole;return workflows.queue(context,filters);});
+  }
+  if(quotes){
+    app.post("/v1/quotes",async request=>{const context=await contexts.resolve(request);const b=quoteBody.parse(request.body);await authorizer.require(context,"billing.manage",{organizationId:b.organizationId as EntityId,siteId:b.siteId as EntityId});const input:{organizationId:EntityId;siteId:EntityId;customerId:EntityId;assetId?:EntityId;opportunityId?:EntityId;lines:{kind:QuoteLineKind;reference?:string;label:string;quantity:number;unitPriceCents:number;unitCostCents?:number;discountBasisPoints?:number;taxRateBasisPoints?:number}[];policy:typeof b.policy;terms:string}={organizationId:b.organizationId as EntityId,siteId:b.siteId as EntityId,customerId:b.customerId as EntityId,lines:b.lines as typeof input.lines,policy:b.policy,terms:b.terms};if(b.assetId)input.assetId=b.assetId as EntityId;if(b.opportunityId)input.opportunityId=b.opportunityId as EntityId;return quotes.create(context,input);});
+    app.post("/v1/quotes/:id/send",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"billing.manage");const p=z.object({id:uuid}).parse(request.params);return quotes.send(context,p.id as EntityId);});
+    app.post("/v1/quotes/:id/accept",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"customers.write");const p=z.object({id:uuid}).parse(request.params),b=quoteAcceptBody.parse(request.body);return quotes.accept(context,p.id as EntityId,{...b,customerId:b.customerId as EntityId});});
+  }
+  if(finance){
+    app.post("/v1/orders",async request=>{const context=await contexts.resolve(request);const b=orderBody.parse(request.body);await authorizer.require(context,"billing.manage",{organizationId:b.organizationId as EntityId,siteId:b.siteId as EntityId});return finance.createOrder(context,{...b,organizationId:b.organizationId as EntityId,siteId:b.siteId as EntityId,customerId:b.customerId as EntityId,quoteId:b.quoteId as EntityId});});
+    app.post("/v1/invoices",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"billing.manage");const b=invoiceBody.parse(request.body);return finance.issueInvoice(context,{orderId:b.orderId as EntityId,paymentTermsDays:b.paymentTermsDays});});
+    app.post("/v1/payments",async request=>{const context=await contexts.resolve(request);await authorizer.require(context,"billing.manage");const b=paymentBody.parse(request.body);return finance.recordPayment(context,{...b,invoiceId:b.invoiceId as EntityId,method:b.method as PaymentProps["method"]});});
+  }
+  if(workshop){
+    const workOrderId=(request:unknown)=>z.object({id:uuid}).parse(request).id as EntityId;
+    app.post("/v1/work-orders",async request=>{const context=await contexts.resolve(request);const b=workOrderBody.parse(request.body);await authorizer.require(context,"workshop.manage",{organizationId:b.organizationId as EntityId,siteId:b.siteId as EntityId});const input={organizationId:b.organizationId as EntityId,siteId:b.siteId as EntityId,customerId:b.customerId as EntityId,assetId:b.assetId as EntityId,checkIn:{...b.checkIn,photoDocumentIds:b.checkIn.photoDocumentIds as EntityId[]}} as Parameters<ManageWorkshop["checkIn"]>[1];if(b.bookingId)input.bookingId=b.bookingId as EntityId;if(b.quoteId)input.quoteId=b.quoteId as EntityId;return workshop.checkIn(context,input);});
+    app.post("/v1/work-orders/:id/diagnose",async request=>{const c=await contexts.resolve(request);await authorizer.require(c,"workshop.manage");return workshop.diagnose(c,workOrderId(request.params));});
+    app.post("/v1/work-orders/:id/jobs",async request=>{const c=await contexts.resolve(request);await authorizer.require(c,"workshop.manage");const b=workshopJobBody.parse(request.body);return workshop.addJob(c,workOrderId(request.params),b as Parameters<ManageWorkshop["addJob"]>[2]);});
+    app.post("/v1/work-orders/:id/authorize",async request=>{const c=await contexts.resolve(request);await authorizer.require(c,"workshop.manage");const b=workshopAuthorizeBody.parse(request.body);return workshop.authorize(c,workOrderId(request.params),b.jobIds as EntityId[]);});
+    app.post("/v1/work-orders/:id/jobs/start",async request=>{const c=await contexts.resolve(request);await authorizer.require(c,"workshop.manage");const b=workshopStartBody.parse(request.body);return workshop.startJob(c,workOrderId(request.params),b.jobId as EntityId,b.technicianId as EntityId);});
+    app.post("/v1/work-orders/:id/time",async request=>{const c=await contexts.resolve(request);await authorizer.require(c,"workshop.manage");const b=workshopTimeBody.parse(request.body);return workshop.recordTime(c,workOrderId(request.params),b.jobId as EntityId,b.minutes);});
+    app.post("/v1/work-orders/:id/jobs/complete",async request=>{const c=await contexts.resolve(request);await authorizer.require(c,"workshop.manage");const b=workshopCompleteBody.parse(request.body);return workshop.completeJob(c,workOrderId(request.params),b.jobId as EntityId,b.diagnosis);});
+    app.post("/v1/work-orders/:id/quality-control",async request=>{const c=await contexts.resolve(request);await authorizer.require(c,"workshop.manage");return workshop.requestQuality(c,workOrderId(request.params));});
+    app.post("/v1/work-orders/:id/quality-approve",async request=>{const c=await contexts.resolve(request);await authorizer.require(c,"workshop.manage");const b=workshopQualityBody.parse(request.body);return workshop.approveQuality(c,workOrderId(request.params),b.notes);});
+    app.post("/v1/work-orders/:id/release",async request=>{const c=await contexts.resolve(request);await authorizer.require(c,"workshop.manage");return workshop.release(c,workOrderId(request.params));});
+  }
+  return app;
+}

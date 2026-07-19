@@ -41,9 +41,12 @@ export class Membership {
   snapshot(): Readonly<MembershipProps> { return this.props; }
 }
 
-export function authorize(membership: Readonly<MembershipProps>, tenantId: TenantId, permission: Permission, siteId?: EntityId): void {
+export interface AccessScope { organizationId: EntityId; siteId?: EntityId | undefined }
+
+export function authorize(membership: Readonly<MembershipProps>, tenantId: TenantId, permission: Permission, scope?: AccessScope): void {
   invariant(membership.tenantId === tenantId, "TENANT_ACCESS_DENIED", "Membership does not belong to this tenant");
   const allowed = new Set([...ROLE_PERMISSIONS[membership.role], ...membership.extraPermissions]);
   invariant(allowed.has(permission), "PERMISSION_DENIED", `Missing permission: ${permission}`);
-  if (siteId && membership.role !== "owner") invariant(membership.siteIds.includes(siteId), "SITE_ACCESS_DENIED", "Member is not assigned to this site");
+  if (scope) invariant(membership.organizationId === scope.organizationId, "ORGANIZATION_ACCESS_DENIED", "Member does not belong to this organization");
+  if (scope?.siteId && membership.role !== "owner") invariant(membership.siteIds.includes(scope.siteId), "SITE_ACCESS_DENIED", "Member is not assigned to this site");
 }

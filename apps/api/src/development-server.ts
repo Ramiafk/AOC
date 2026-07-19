@@ -1,0 +1,21 @@
+import { InMemoryAuditSink, AuditRecorder } from "../../../packages/audit/src/audit.ts";
+import { Membership } from "../../../packages/organizations/src/access-control.ts";
+import { InMemoryMembershipRepository } from "../../../packages/organizations/src/in-memory-membership-repository.ts";
+import { InMemoryInvitationNotifier, ManageMemberships } from "../../../packages/organizations/src/manage-memberships.ts";
+import type { EntityId } from "../../../packages/core/src/identity.ts";
+import { tenantId } from "../../../packages/core/src/identity.ts";
+import { PlatformApplication } from "./application.ts";
+import { buildApp } from "./build-app.ts";
+import { MapTokenVerifier, RequestContextResolver } from "./context-resolver.ts";
+import { InMemoryPlatformRepository } from "./in-memory-platform-repository.ts";
+import { RouteAuthorizer } from "./route-authorizer.ts";
+
+if(process.env.NODE_ENV==="production")throw new Error("IN_MEMORY_ADAPTERS_FORBIDDEN_IN_PRODUCTION");
+const tenant=process.env.DEV_TENANT_ID,actor=process.env.DEV_ACTOR_ID,token=process.env.DEV_ACCESS_TOKEN;
+if(!tenant||!actor||!token)throw new Error("DEV_TENANT_ID, DEV_ACTOR_ID and DEV_ACCESS_TOKEN are required");
+const repository=new InMemoryPlatformRepository();
+const application=new PlatformApplication(repository,new AuditRecorder(new InMemoryAuditSink()));
+const contexts=new RequestContextResolver(new MapTokenVerifier(new Map([[token,{tenantId:tenant,actorId:actor}]])));
+const membership=Membership.create({tenantId:tenantId(tenant),organizationId:actor as EntityId,userId:actor as EntityId,role:"owner",siteIds:[],extraPermissions:[]}).snapshot();
+const memberships=new InMemoryMembershipRepository([membership]);
+await buildApp({application,contexts,authorizer:new RouteAuthorizer(memberships),modules:{memberships:new ManageMemberships(memberships,new InMemoryInvitationNotifier())}}).listen({host:"127.0.0.1",port:Number(process.env.PORT??3000)});

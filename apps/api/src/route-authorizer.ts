@@ -1,5 +1,5 @@
-import type { EntityId, RequestContext } from "../../../packages/core/src/identity.ts";
-import type { Permission, MembershipProps } from "../../../packages/organizations/src/access-control.ts";
+import type { RequestContext } from "../../../packages/core/src/identity.ts";
+import type { AccessScope, Permission, MembershipProps } from "../../../packages/organizations/src/access-control.ts";
 import { authorize } from "../../../packages/organizations/src/access-control.ts";
 import { DomainError } from "../../../packages/core/src/errors.ts";
 
@@ -11,10 +11,10 @@ export class RouteAuthorizer {
   private readonly memberships: MembershipReader;
   constructor(memberships: MembershipReader) { this.memberships = memberships; }
 
-  async require(context: RequestContext, permission: Permission, siteId?: EntityId): Promise<void> {
+  async require(context: RequestContext, permission: Permission, scope?: AccessScope): Promise<void> {
     const membership = await this.memberships.findByActor(context);
     if (!membership) throw new DomainError("MEMBERSHIP_REQUIRED", "No active membership was found");
-    authorize(membership, context.tenantId, permission, siteId);
+    authorize(membership, context.tenantId, permission, scope);
   }
 }
 
