@@ -16,6 +16,7 @@ export interface InventoryRepository {
   findPurchaseOrder(tenantId: TenantId, id: EntityId): Promise<Readonly<PurchaseOrderProps> | null>;
   listReceipts(tenantId: TenantId, purchaseOrderId: EntityId): Promise<readonly Readonly<GoodsReceiptProps>[]>;
   receivePurchaseOrder(receipt: Readonly<GoodsReceiptProps>, positions: readonly Readonly<StockPositionProps>[], order: Readonly<PurchaseOrderProps>): Promise<void>;
+  withPurchaseOrderLock<T>(tenantId: TenantId, purchaseOrderId: EntityId, operation: (repository: InventoryRepository) => Promise<T>): Promise<T>;
 }
 
 export class ManageInventory {
@@ -33,6 +34,7 @@ export class ManageInventory {
 
   async createPurchaseOrder(context: RequestContext, input: { organizationId: EntityId; siteId: EntityId; supplierId: EntityId; lines: PurchaseOrderProps["lines"] }) {
     invariant(input.lines.length > 0 && input.lines.every(line => line.quantity > 0 && line.unitCostCents >= 0), "INVALID_PURCHASE_ORDER", "Purchase order is invalid");
+    invariant(new Set(input.lines.map(line => line.partId)).size === input.lines.length, "DUPLICATE_PART_LINE", "A part can appear only once in a purchase order");
     const supplier = await this.repository.findSupplier(context.tenantId, input.supplierId);
     invariant(supplier?.active && supplier.organizationId === input.organizationId, "SUPPLIER_SCOPE_MISMATCH", "Supplier does not belong to this organization");
     for (const line of input.lines) { const part = await this.repository.findPart(context.tenantId, line.partId); invariant(part?.organizationId === input.organizationId, "PART_SCOPE_MISMATCH", "Part does not belong to this organization"); }
@@ -44,28 +46,33 @@ export class ManageInventory {
   async order(context: RequestContext, id: EntityId) { const value = await this.purchaseOrder(context.tenantId, id); invariant(value.status === "draft", "PURCHASE_ORDER_NOT_DRAFT", "Only a draft order can be submitted"); const next = { ...value, status: "ordered" as const }; await this.repository.savePurchaseOrder(next); return next; }
 
   async receivePurchaseOrder(context: RequestContext, purchaseOrderId: EntityId, lines: readonly GoodsReceiptLine[]) {
-    const order = await this.purchaseOrder(context.tenantId, purchaseOrderId);
+    invariant(new Set(lines.map(line => line.partId)).size === lines.length, "DUPLICATE_PART_LINE", "A part can appear only once in a receipt");
+    return this.repository.withPurchaseOrderLock(context.tenantId, purchaseOrderId, repository => this.receiveLocked(repository, context, purchaseOrderId, lines));
+  }
+
+  private async receiveLocked(repository: InventoryRepository, context: RequestContext, purchaseOrderId: EntityId, lines: readonly GoodsReceiptLine[]) {
+    const order = await this.purchaseOrder(context.tenantId, purchaseOrderId, repository);
     invariant(order.status === "ordered" || order.status === "partially_received", "PURCHASE_ORDER_NOT_RECEIVABLE", "Purchase order cannot be received");
     invariant(lines.length > 0 && lines.every(line => line.quantity > 0 && line.unitCostCents >= 0), "INVALID_RECEIPT", "Receipt is invalid");
-    const previous = await this.repository.listReceipts(context.tenantId, order.id);
+    const previous = await repository.listReceipts(context.tenantId, order.id);
     const received = new Map<EntityId, number>();
     for (const receipt of previous) for (const line of receipt.lines) received.set(line.partId, (received.get(line.partId) ?? 0) + line.quantity);
     const positions: StockPositionProps[] = [];
     for (const line of lines) {
       const ordered = order.lines.find(value => value.partId === line.partId);
       invariant(ordered && (received.get(line.partId) ?? 0) + line.quantity <= ordered.quantity, "RECEIPT_EXCEEDS_ORDER", "Receipt exceeds ordered quantity");
-      const current = await this.position(context.tenantId, order.siteId, line.partId);
+      const current = await this.position(context.tenantId, order.siteId, line.partId, repository);
       positions.push({ ...current, onHand: current.onHand + line.quantity, averageUnitCostCents: weightedAverageCost(current, line.quantity, line.unitCostCents), updatedAt: this.now().toISOString() });
       received.set(line.partId, (received.get(line.partId) ?? 0) + line.quantity);
     }
     const complete = order.lines.every(line => (received.get(line.partId) ?? 0) === line.quantity);
     const nextOrder = { ...order, status: complete ? "received" as const : "partially_received" as const };
     const receipt: GoodsReceiptProps = { id: newEntityId(), tenantId: context.tenantId, organizationId: order.organizationId, siteId: order.siteId, purchaseOrderId: order.id, supplierId: order.supplierId, lines: Object.freeze([...lines]), receivedBy: context.actorId, receivedAt: this.now().toISOString() };
-    await this.repository.receivePurchaseOrder(receipt, positions, nextOrder); return { receipt, order: nextOrder, positions };
+    await repository.receivePurchaseOrder(receipt, positions, nextOrder); return { receipt, order: nextOrder, positions };
   }
 
   async scopeForPurchaseOrder(context: RequestContext, id: EntityId) { const value = await this.purchaseOrder(context.tenantId, id); return { organizationId: value.organizationId, siteId: value.siteId }; }
-  private async position(tenantId: TenantId, siteId: EntityId, partId: EntityId): Promise<StockPositionProps> { return (await this.repository.findPosition(tenantId, siteId, partId)) ?? { tenantId, siteId, partId, onHand: 0, reserved: 0, averageUnitCostCents: 0, updatedAt: this.now().toISOString() }; }
+  private async position(tenantId: TenantId, siteId: EntityId, partId: EntityId, repository = this.repository): Promise<StockPositionProps> { return (await repository.findPosition(tenantId, siteId, partId)) ?? { tenantId, siteId, partId, onHand: 0, reserved: 0, averageUnitCostCents: 0, updatedAt: this.now().toISOString() }; }
   private async reservation(tenantId: TenantId, id: EntityId) { const value = await this.repository.findReservation(tenantId, id); invariant(value, "RESERVATION_NOT_FOUND", "Reservation was not found"); return value; }
-  private async purchaseOrder(tenantId: TenantId, id: EntityId) { const value = await this.repository.findPurchaseOrder(tenantId, id); invariant(value, "PURCHASE_ORDER_NOT_FOUND", "Purchase order was not found"); return value; }
+  private async purchaseOrder(tenantId: TenantId, id: EntityId, repository = this.repository) { const value = await repository.findPurchaseOrder(tenantId, id); invariant(value, "PURCHASE_ORDER_NOT_FOUND", "Purchase order was not found"); return value; }
 }
