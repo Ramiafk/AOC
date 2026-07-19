@@ -56,7 +56,8 @@ Le découpage complet est dans `docs/DELIVERY_LOTS.md` et les décisions dans `d
 - Lot 5A : stock commercial de véhicules, préparation et publication multicanal — terminé.
 - Lot 5B : checklist de préparation et médias du véhicule — terminé.
 - Lot 5C : vente véhicule, calcul de marge et retrait atomique des annonces — terminé.
-- Prochaine tranche : livraison et remise du véhicule.
+- Lot 5D : planification de livraison et remise auditable du véhicule — terminé.
+- Prochaine tranche : mutation du passeport et documents de cession.
 
 ### Base locale
 

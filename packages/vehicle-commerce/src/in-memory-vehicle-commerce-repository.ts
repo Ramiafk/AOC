@@ -1,13 +1,14 @@
 import type { EntityId, TenantId } from "../../core/src/identity.ts";
-import type { VehicleCommerceRepository, VehicleMediaProps, VehiclePreparationCheckProps, VehiclePublicationProps, VehicleSaleProps, VehicleStockItemProps } from "./vehicle-commerce.ts";
+import type { VehicleCommerceRepository, VehicleDeliveryProps, VehicleMediaProps, VehiclePreparationCheckProps, VehiclePublicationProps, VehicleSaleProps, VehicleStockItemProps } from "./vehicle-commerce.ts";
 
 export class InMemoryVehicleCommerceRepository implements VehicleCommerceRepository {
-  assets=new Set<string>(); customers=new Set<string>();sites=new Map<string,EntityId>();items:VehicleStockItemProps[]=[];publications:VehiclePublicationProps[]=[];checks:VehiclePreparationCheckProps[]=[];media:VehicleMediaProps[]=[];sales:VehicleSaleProps[]=[];
+  assets=new Set<string>(); customers=new Set<string>();sites=new Map<string,EntityId>();items:VehicleStockItemProps[]=[];publications:VehiclePublicationProps[]=[];checks:VehiclePreparationCheckProps[]=[];media:VehicleMediaProps[]=[];sales:VehicleSaleProps[]=[];deliveries:VehicleDeliveryProps[]=[];
   private readonly locks=new Map<string,Promise<void>>();
   async assetExists(tenantId:TenantId,assetId:EntityId){return this.assets.has(`${tenantId}:${assetId}`);}
   async siteBelongsToOrganization(tenantId:TenantId,organizationId:EntityId,siteId:EntityId){return this.sites.get(`${tenantId}:${siteId}`)===organizationId;}
   async customerExists(tenantId:TenantId,customerId:EntityId){return this.customers.has(`${tenantId}:${customerId}`);}
   async findSale(tenantId:TenantId,stockItemId:EntityId){return this.sales.find(value=>value.tenantId===tenantId&&value.stockItemId===stockItemId)??null;}
+  async findDelivery(tenantId:TenantId,stockItemId:EntityId){return this.deliveries.find(value=>value.tenantId===tenantId&&value.stockItemId===stockItemId)??null;}
   async saveStockItem(value:VehicleStockItemProps){this.items=this.items.filter(item=>item.id!==value.id);this.items.push(value);}
   async findStockItem(tenantId:TenantId,id:EntityId){return this.items.find(item=>item.tenantId===tenantId&&item.id===id)??null;}
   async listPublications(tenantId:TenantId,stockItemId:EntityId){return this.publications.filter(item=>item.tenantId===tenantId&&item.stockItemId===stockItemId);}
@@ -19,4 +20,6 @@ export class InMemoryVehicleCommerceRepository implements VehicleCommerceReposit
   async publish(value:VehiclePublicationProps,stockItem:VehicleStockItemProps){const snapshot={items:[...this.items],publications:[...this.publications]};try{await this.saveStockItem(stockItem);this.publications.push(value);}catch(error){this.items=snapshot.items;this.publications=snapshot.publications;throw error;}}
   async markReady(stockItem:VehicleStockItemProps,_readyBy:EntityId){await this.saveStockItem(stockItem);}
   async sell(value:VehicleSaleProps,stockItem:VehicleStockItemProps){const snapshot={items:[...this.items],publications:[...this.publications],sales:[...this.sales]};try{await this.saveStockItem(stockItem);this.publications=this.publications.map(item=>item.stockItemId===stockItem.id&&item.status==="published"?{...item,status:"withdrawn"}:item);this.sales.push(value);}catch(error){this.items=snapshot.items;this.publications=snapshot.publications;this.sales=snapshot.sales;throw error;}}
+  async saveDelivery(value:VehicleDeliveryProps){this.deliveries.push(value);}
+  async completeDelivery(value:VehicleDeliveryProps,stockItem:VehicleStockItemProps){await this.saveStockItem(stockItem);this.deliveries=this.deliveries.map(item=>item.id===value.id?value:item);}
 }
