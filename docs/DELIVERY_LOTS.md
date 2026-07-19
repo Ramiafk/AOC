@@ -51,4 +51,5 @@ Une réservation conserve toujours son canal d'origine (`central_marketplace`, `
 | 4C — Réceptions et valorisation | Terminé | fournisseurs par organisation, commandes d'achat par site, réceptions partielles et coût moyen pondéré transactionnel |
 | 4D — Retours et réapprovisionnement | Terminé | fermeture des reliquats, retours fournisseur atomiques et alertes par seuil de stock disponible |
 | 5A — Stock véhicules | Terminé | acquisition, préparation, prix et publication séparée vers les canaux directs ou la plateforme centrale |
-| 5B — Merchandising véhicule | Développement | checklist obligatoire, image principale et préparation auditable avant publication |
+| 5B — Merchandising véhicule | Terminé | checklist obligatoire, image principale et préparation auditable avant publication |
+| 5C — Vente véhicule | Terminé | vente verrouillée, marge brute, retrait atomique des annonces et événement outbox |

@@ -9,10 +9,13 @@ export interface VehicleStockItemProps extends TenantScoped { id: EntityId; orga
 export interface VehiclePublicationProps extends TenantScoped { id: EntityId; organizationId: EntityId; siteId: EntityId; stockItemId: EntityId; channel: PublicationChannel; askingPriceCents: number; status: "published" | "withdrawn"; publishedBy: EntityId; publishedAt: string }
 export interface VehiclePreparationCheckProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; label:string; required:boolean; completedBy?:EntityId|undefined; completedAt?:string|undefined; createdAt:string }
 export interface VehicleMediaProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; kind:"image"|"video"; storageKey:string; position:number; primary:boolean; createdBy:EntityId; createdAt:string }
+export interface VehicleSaleProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; buyerCustomerId:EntityId; salePriceCents:number; acquisitionCostCents:number; grossMarginCents:number; soldBy:EntityId; soldAt:string }
 
 export interface VehicleCommerceRepository {
   assetExists(tenantId: TenantId, assetId: EntityId): Promise<boolean>;
   siteBelongsToOrganization(tenantId: TenantId, organizationId: EntityId, siteId: EntityId): Promise<boolean>;
+  customerExists(tenantId:TenantId,customerId:EntityId):Promise<boolean>;
+  findSale(tenantId:TenantId,stockItemId:EntityId):Promise<Readonly<VehicleSaleProps>|null>;
   saveStockItem(value: Readonly<VehicleStockItemProps>): Promise<void>;
   findStockItem(tenantId: TenantId, id: EntityId): Promise<Readonly<VehicleStockItemProps> | null>;
   listPublications(tenantId: TenantId, stockItemId: EntityId): Promise<readonly Readonly<VehiclePublicationProps>[]>;
@@ -23,6 +26,7 @@ export interface VehicleCommerceRepository {
   withStockItemLock<T>(tenantId: TenantId, stockItemId: EntityId, operation: (repository: VehicleCommerceRepository) => Promise<T>): Promise<T>;
   publish(value: Readonly<VehiclePublicationProps>, stockItem: Readonly<VehicleStockItemProps>): Promise<void>;
   markReady(stockItem:Readonly<VehicleStockItemProps>,readyBy:EntityId):Promise<void>;
+  sell(value:Readonly<VehicleSaleProps>,stockItem:Readonly<VehicleStockItemProps>):Promise<void>;
 }
 
 export class ManageVehicleCommerce {
@@ -55,6 +59,8 @@ export class ManageVehicleCommerce {
       const next={...value,status:"published" as const,updatedAt:this.now().toISOString()}; await repository.publish(publication,next); return {publication,stockItem:next};
     });
   }
+
+  async sell(context:RequestContext,id:EntityId,input:{buyerCustomerId:EntityId;salePriceCents:number}){invariant(input.salePriceCents>0,"INVALID_SALE_PRICE","Sale price must be positive");return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const item=await this.item(context.tenantId,id,repository);invariant(item.status==="published","STOCK_ITEM_NOT_SELLABLE","Only a published vehicle can be sold");invariant(await repository.customerExists(context.tenantId,input.buyerCustomerId),"BUYER_NOT_FOUND","Buyer was not found");const soldAt=this.now().toISOString(),sale:VehicleSaleProps={id:newEntityId(),tenantId:context.tenantId,organizationId:item.organizationId,siteId:item.siteId,stockItemId:item.id,buyerCustomerId:input.buyerCustomerId,salePriceCents:input.salePriceCents,acquisitionCostCents:item.acquisitionCostCents,grossMarginCents:input.salePriceCents-item.acquisitionCostCents,soldBy:context.actorId,soldAt},next={...item,status:"sold" as const,updatedAt:soldAt};await repository.sell(sale,next);return{sale,stockItem:next};});}
 
   async scope(context: RequestContext,id:EntityId){const value=await this.item(context.tenantId,id);return{organizationId:value.organizationId,siteId:value.siteId};}
   private async transition(context:RequestContext,id:EntityId,from:VehicleStockStatus,to:VehicleStockStatus,code:string){const value=await this.item(context.tenantId,id);invariant(value.status===from,code,"Vehicle stock transition is not allowed");const next={...value,status:to,updatedAt:this.now().toISOString()};await this.repository.saveStockItem(next);return next;}
