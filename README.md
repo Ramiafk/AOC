@@ -51,7 +51,8 @@ Le découpage complet est dans `docs/DELIVERY_LOTS.md` et les décisions dans `d
 - Lot 3F : journal comptable, remboursements et rapprochement bancaire — terminé.
 - Lot 4A : gestion atelier, ordres de réparation, temps et contrôle qualité — terminé.
 - Lot 4B : stock de pièces, réservations et approvisionnement — terminé.
-- Prochaine tranche : fournisseurs, réceptions et valorisation du stock.
+- Lot 4C : fournisseurs, réceptions partielles/complètes et valorisation du stock au coût moyen pondéré — en revue CTO.
+- Prochaine tranche : commandes fournisseurs, reliquats, retours et alertes de réapprovisionnement.
 
 ### Base locale
 

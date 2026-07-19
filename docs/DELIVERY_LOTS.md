@@ -43,3 +43,9 @@ Une réservation conserve toujours son canal d'origine (`central_marketplace`, `
 - conversion demande → devis → paiement ;
 - rétention client et retour atelier ;
 - part de demandes captées en direct par le professionnel.
+
+## Suivi des tranches actives
+
+| Tranche | Statut | Capacité |
+|---|---|---|
+| 4C — Réceptions et valorisation | Revue CTO | fournisseurs par organisation, commandes d'achat par site, réceptions partielles et coût moyen pondéré transactionnel |
