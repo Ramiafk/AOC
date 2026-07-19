@@ -17,7 +17,7 @@ Faire entrer un actif existant dans le stock commercial d'un professionnel, suiv
 
 ## Sécurité et base de données
 
-Les routes résolvent le périmètre organisation/site avant chaque action sur un identifiant opaque. La migration `017_vehicle_commerce.sql` crée `vehicle_stock_items` et `vehicle_publications` avec RLS forcée, clés étrangères composites tenant-scoped, unicité par actif et par canal, et index de consultation.
+Les routes résolvent le périmètre organisation/site avant chaque action sur un identifiant opaque. La migration `017_vehicle_commerce.sql` crée `vehicle_stock_items` et `vehicle_publications` avec RLS forcée, unicité par actif et par canal, et index de consultation. La migration corrective et immuable `018_vehicle_commerce_scope_constraints.sql` impose en plus les relations composites tenant/organisation/site pour le stock et tenant/organisation/site/stock pour chaque publication.
 
 ## Limites
 

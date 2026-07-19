@@ -56,13 +56,19 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     const t2="32222222-2222-4222-8222-222222222222";
     const organizationId=newEntityId();
     const siteId=newEntityId();
+    const otherOrganizationId=newEntityId();
+    const otherSiteId=newEntityId();
     const customerId=newEntityId();
     const assetId=newEntityId();
+    const otherAssetId=newEntityId();
     await adminPool.query("INSERT INTO tenants(id,slug,display_name) VALUES($1,$3,$3),($2,$4,$4) ON CONFLICT DO NOTHING",[t1,t2,`inventory-${t1}`,`inventory-${t2}`]);
     await adminPool.query("INSERT INTO organizations(id,tenant_id,legal_name,display_name,country_code,activities,created_at) VALUES($1,$2,'Inventory','Inventory','FR',ARRAY['workshop'],now())",[organizationId,t1]);
+    await adminPool.query("INSERT INTO organizations(id,tenant_id,legal_name,display_name,country_code,activities,created_at) VALUES($1,$2,'Other','Other','FR',ARRAY['dealer'],now())",[otherOrganizationId,t1]);
     await adminPool.query("INSERT INTO sites(id,tenant_id,organization_id,name,country_code,timezone,activities,created_at) VALUES($1,$2,$3,'Main','FR','Europe/Paris',ARRAY['workshop'],now())",[siteId,t1,organizationId]);
+    await adminPool.query("INSERT INTO sites(id,tenant_id,organization_id,name,country_code,timezone,activities,created_at) VALUES($1,$2,$3,'Other','FR','Europe/Paris',ARRAY['dealer'],now())",[otherSiteId,t1,otherOrganizationId]);
     await adminPool.query("INSERT INTO customers(id,tenant_id,kind,display_name,email,acquisition_channel,acquisition_owner_organization_id,created_at) VALUES($1,$2,'individual','Seller','seller@example.test','staff',$3,now())",[customerId,t1,organizationId]);
     await adminPool.query("INSERT INTO assets(id,tenant_id,owner_customer_id,kind,vin_or_serial,attributes,created_at) VALUES($1,$2,$3,'car',$4,'{}',now())",[assetId,t1,customerId,`VIN-${assetId}`]);
+    await adminPool.query("INSERT INTO assets(id,tenant_id,owner_customer_id,kind,vin_or_serial,attributes,created_at) VALUES($1,$2,$3,'car',$4,'{}',now())",[otherAssetId,t1,customerId,`VIN-${otherAssetId}`]);
 
     const applicationUrl=new URL(connectionString!);
     applicationUrl.username=role;
@@ -106,6 +112,8 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_publications WHERE tenant_id=$1 AND stock_item_id=$2",[t1,stockItem.id])).rows[0].count,1);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM outbox_events WHERE tenant_id=$1 AND event_type='commerce.vehicle_published.v1' AND payload->>'stockItemId'=$2",[t1,stockItem.id])).rows[0].count,1);
     assert.equal(await commerceRepository.findStockItem(tenantId(t2),stockItem.id),null);
+    await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_stock_items(id,tenant_id,organization_id,site_id,asset_id,acquisition_mode,acquisition_cost_cents,status,created_by,created_at,updated_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,'purchase',100,'acquired',$5,now(),now())`,[t1,organizationId,otherSiteId,otherAssetId,context.actorId]),/vehicle_stock_tenant_organization_site_fk/);
+    await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_publications(id,tenant_id,organization_id,site_id,stock_item_id,channel,asking_price_cents,status,published_by,published_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,'professional_website',1590000,'published',$5,now())`,[t1,otherOrganizationId,otherSiteId,stockItem.id,context.actorId]),/vehicle_publications_tenant_stock_scope_fk/);
   } finally {
     if(applicationPool) await applicationPool.end();
     await adminPool.query(`DROP OWNED BY ${role}`).catch(()=>undefined);
