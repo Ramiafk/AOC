@@ -80,6 +80,16 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     assert.equal(receipts.filter(result=>result.status==="rejected").length,1);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM goods_receipts WHERE tenant_id=$1 AND purchase_order_id=$2",[t1,order.id])).rows[0].count,1);
     assert.equal((await repository.findPosition(context.tenantId,siteId,part.id))?.onHand,4);
+    await service.returnToSupplier(context,order.id,[{partId:part.id,quantity:2}],"Damaged in transit");
+    await assert.rejects(()=>service.returnToSupplier(context,order.id,[{partId:part.id,quantity:3}],"Exceeds receipt"));
+    assert.equal((await service.cancelRemainder(context,order.id)).status,"closed");
+    assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM supplier_returns WHERE tenant_id=$1 AND purchase_order_id=$2",[t1,order.id])).rows[0].count,1);
+    assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM outbox_events WHERE tenant_id=$1 AND aggregate_id=$2 AND event_type='inventory.purchase_remainder_closed.v1'",[t1,order.id])).rows[0].count,1);
+    assert.equal((await repository.findPosition(context.tenantId,siteId,part.id))?.onHand,2);
+    const lowPart=await service.createPart(context,{organizationId,sku:"PG-LOW",name:"Low stock",unitCostCents:100,salePriceCents:200,reorderPoint:1,reorderQuantity:6});
+    const alerts=await service.replenishmentAlerts(context,organizationId,siteId);
+    assert.deepEqual(alerts.map(alert=>alert.partId),[lowPart.id]);
+    assert.deepEqual(await repository.listReturns(tenantId(t2),order.id),[]);
   } finally {
     if(applicationPool) await applicationPool.end();
     await adminPool.query(`DROP OWNED BY ${role}`).catch(()=>undefined);
