@@ -7,6 +7,8 @@ import { loadMigrations, migrate } from "../../infrastructure/postgres/migrate.t
 import { PostgresInventoryRepository } from "../../infrastructure/postgres/postgres-inventory-repository.ts";
 import { newEntityId, tenantId, type RequestContext } from "../core/src/identity.ts";
 import { ManageInventory } from "../inventory/src/manage-inventory.ts";
+import { PostgresVehicleCommerceRepository } from "../../infrastructure/postgres/postgres-vehicle-commerce-repository.ts";
+import { ManageVehicleCommerce } from "../vehicle-commerce/src/vehicle-commerce.ts";
 
 const connectionString=process.env.TEST_DATABASE_URL;
 test("PostgreSQL enforces RLS, composite tenant FKs and transactional outbox",{skip:!connectionString},async()=>{
@@ -54,9 +56,13 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     const t2="32222222-2222-4222-8222-222222222222";
     const organizationId=newEntityId();
     const siteId=newEntityId();
+    const customerId=newEntityId();
+    const assetId=newEntityId();
     await adminPool.query("INSERT INTO tenants(id,slug,display_name) VALUES($1,$3,$3),($2,$4,$4) ON CONFLICT DO NOTHING",[t1,t2,`inventory-${t1}`,`inventory-${t2}`]);
     await adminPool.query("INSERT INTO organizations(id,tenant_id,legal_name,display_name,country_code,activities,created_at) VALUES($1,$2,'Inventory','Inventory','FR',ARRAY['workshop'],now())",[organizationId,t1]);
     await adminPool.query("INSERT INTO sites(id,tenant_id,organization_id,name,country_code,timezone,activities,created_at) VALUES($1,$2,$3,'Main','FR','Europe/Paris',ARRAY['workshop'],now())",[siteId,t1,organizationId]);
+    await adminPool.query("INSERT INTO customers(id,tenant_id,kind,display_name,email,acquisition_channel,acquisition_owner_organization_id,created_at) VALUES($1,$2,'individual','Seller','seller@example.test','staff',$3,now())",[customerId,t1,organizationId]);
+    await adminPool.query("INSERT INTO assets(id,tenant_id,owner_customer_id,kind,vin_or_serial,attributes,created_at) VALUES($1,$2,$3,'car',$4,'{}',now())",[assetId,t1,customerId,`VIN-${assetId}`]);
 
     const applicationUrl=new URL(connectionString!);
     applicationUrl.username=role;
@@ -90,6 +96,16 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     const alerts=await service.replenishmentAlerts(context,organizationId,siteId);
     assert.deepEqual(alerts.map(alert=>alert.partId),[lowPart.id]);
     assert.deepEqual(await repository.listReturns(tenantId(t2),order.id),[]);
+    const commerceRepository=new PostgresVehicleCommerceRepository(applicationPool);
+    const commerce=new ManageVehicleCommerce(commerceRepository,()=>new Date("2026-07-22T10:00:00Z"));
+    const stockItem=await commerce.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"trade_in",acquisitionCostCents:1200000});
+    await commerce.startPreparation(context,stockItem.id);
+    await commerce.markReady(context,stockItem.id,1590000);
+    const publicationResults=await Promise.allSettled([commerce.publish(context,stockItem.id,"central_marketplace"),commerce.publish(context,stockItem.id,"central_marketplace")]);
+    assert.equal(publicationResults.filter(result=>result.status==="fulfilled").length,1);
+    assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_publications WHERE tenant_id=$1 AND stock_item_id=$2",[t1,stockItem.id])).rows[0].count,1);
+    assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM outbox_events WHERE tenant_id=$1 AND event_type='commerce.vehicle_published.v1' AND payload->>'stockItemId'=$2",[t1,stockItem.id])).rows[0].count,1);
+    assert.equal(await commerceRepository.findStockItem(tenantId(t2),stockItem.id),null);
   } finally {
     if(applicationPool) await applicationPool.end();
     await adminPool.query(`DROP OWNED BY ${role}`).catch(()=>undefined);
