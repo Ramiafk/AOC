@@ -48,4 +48,5 @@ Une réservation conserve toujours son canal d'origine (`central_marketplace`, `
 
 | Tranche | Statut | Capacité |
 |---|---|---|
-| 4C — Réceptions et valorisation | Revue CTO | fournisseurs par organisation, commandes d'achat par site, réceptions partielles et coût moyen pondéré transactionnel |
+| 4C — Réceptions et valorisation | Terminé | fournisseurs par organisation, commandes d'achat par site, réceptions partielles et coût moyen pondéré transactionnel |
+| 4D — Retours et réapprovisionnement | Développement | fermeture des reliquats, retours fournisseur atomiques et alertes par seuil de stock disponible |

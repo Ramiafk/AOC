@@ -11,7 +11,7 @@ import { tenantId, type EntityId } from "../core/src/identity.ts";
 import { ManageInventory } from "../inventory/src/manage-inventory.ts";
 import { InMemoryInventoryRepository } from "../inventory/src/in-memory-inventory-repository.ts";
 
-test("runs supplier to valued receipt through scoped HTTP routes", async () => {
+test("runs receipts, supplier returns and replenishment through scoped HTTP routes", async () => {
   const tenant = "11111111-1111-4111-8111-111111111111", actor = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", organizationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", siteId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
   const contexts = new RequestContextResolver(new MapTokenVerifier(new Map([["inventory-token", { tenantId: tenant, actorId: actor }]])));
   const membership = Membership.create({ tenantId: tenantId(tenant), organizationId: organizationId as EntityId, userId: actor as EntityId, role: "owner", siteIds: [], extraPermissions: [] }).snapshot();
@@ -26,6 +26,16 @@ test("runs supplier to valued receipt through scoped HTTP routes", async () => {
   await app.inject({ method: "POST", url: `/v1/purchase-orders/${order.json().id}/order`, headers });
   const receipt = await app.inject({ method: "POST", url: `/v1/purchase-orders/${order.json().id}/receipts`, headers, payload: { lines: [{ partId: part.json().id, quantity: 5, unitCostCents: 900 }] } });
   assert.equal(receipt.statusCode, 200); assert.equal(receipt.json().order.status, "received"); assert.equal(receipt.json().positions[0].averageUnitCostCents, 900);
+  const supplierReturn = await app.inject({ method: "POST", url: `/v1/purchase-orders/${order.json().id}/returns`, headers, payload: { lines: [{ partId: part.json().id, quantity: 2 }], reason: "Pièces endommagées" } });
+  assert.equal(supplierReturn.statusCode, 200); assert.equal(supplierReturn.json().positions[0].onHand, 3);
+  const lowPart = await app.inject({ method: "POST", url: "/v1/parts", headers, payload: { organizationId, sku: "LOW-01", name: "Low stock part", unitCostCents: 100, salePriceCents: 200, reorderPoint: 2, reorderQuantity: 8 } });
+  const alerts = await app.inject({ method: "GET", url: `/v1/sites/${siteId}/replenishment-alerts?organizationId=${organizationId}`, headers });
+  assert.equal(alerts.statusCode, 200); assert.deepEqual(alerts.json().map((alert: { partId: string }) => alert.partId), [lowPart.json().id]);
+  const partialOrder = await app.inject({ method: "POST", url: "/v1/purchase-orders", headers, payload: { organizationId, siteId, supplierId: supplier.json().id, lines: [{ partId: part.json().id, quantity: 2, unitCostCents: 900 }] } });
+  await app.inject({ method: "POST", url: `/v1/purchase-orders/${partialOrder.json().id}/order`, headers });
+  await app.inject({ method: "POST", url: `/v1/purchase-orders/${partialOrder.json().id}/receipts`, headers, payload: { lines: [{ partId: part.json().id, quantity: 1, unitCostCents: 900 }] } });
+  const closed = await app.inject({ method: "POST", url: `/v1/purchase-orders/${partialOrder.json().id}/close-remainder`, headers });
+  assert.equal(closed.statusCode, 200); assert.equal(closed.json().status, "closed");
   const denied = await app.inject({ method: "POST", url: "/v1/suppliers", headers, payload: { organizationId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", code: "NOPE", name: "Denied" } });
   assert.equal(denied.statusCode, 403); assert.equal(denied.json().error, "ORGANIZATION_ACCESS_DENIED");
   await app.close();

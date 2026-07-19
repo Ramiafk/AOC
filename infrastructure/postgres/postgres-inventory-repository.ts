@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import type { EntityId, TenantId } from "../../packages/core/src/identity.ts";
 import type { InventoryRepository } from "../../packages/inventory/src/manage-inventory.ts";
-import type { GoodsReceiptProps, PartProps, PurchaseOrderProps, StockPositionProps, StockReservationProps, SupplierProps } from "../../packages/inventory/src/inventory.ts";
+import type { GoodsReceiptProps, PartProps, PurchaseOrderProps, ReplenishmentAlertProps, StockPositionProps, StockReservationProps, SupplierProps, SupplierReturnProps } from "../../packages/inventory/src/inventory.ts";
 
 export class PostgresInventoryRepository implements InventoryRepository {
   private readonly pool: Pool;
@@ -35,6 +35,8 @@ export class PostgresInventoryRepository implements InventoryRepository {
   async savePurchaseOrder(value: Readonly<PurchaseOrderProps>) { await this.tenantTransaction(value.tenantId, client => client.query(`INSERT INTO purchase_orders(id,tenant_id,organization_id,site_id,supplier_id,number,lines,status,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO UPDATE SET status=EXCLUDED.status`, [value.id,value.tenantId,value.organizationId,value.siteId,value.supplierId,value.number,JSON.stringify(value.lines),value.status,value.createdAt]).then(() => undefined)); }
   async findPurchaseOrder(tenantId: TenantId, id: EntityId) { return this.tenantTransaction(tenantId, async client => { const result = await client.query(`SELECT id,tenant_id AS "tenantId",organization_id AS "organizationId",site_id AS "siteId",supplier_id AS "supplierId",number,lines,status,created_at AS "createdAt" FROM purchase_orders WHERE tenant_id=$1 AND id=$2`, [tenantId,id]); return (result.rows[0] as PurchaseOrderProps | undefined) ?? null; }); }
   async listReceipts(tenantId: TenantId, purchaseOrderId: EntityId) { return this.tenantTransaction(tenantId, async client => { const result = await client.query(`SELECT r.id,r.tenant_id AS "tenantId",r.organization_id AS "organizationId",r.site_id AS "siteId",r.purchase_order_id AS "purchaseOrderId",r.supplier_id AS "supplierId",r.received_by AS "receivedBy",r.received_at AS "receivedAt",COALESCE(jsonb_agg(jsonb_build_object('partId',l.part_id,'quantity',l.quantity::float8,'unitCostCents',l.unit_cost_cents)) FILTER(WHERE l.part_id IS NOT NULL),'[]') AS lines FROM goods_receipts r LEFT JOIN goods_receipt_lines l ON l.tenant_id=r.tenant_id AND l.receipt_id=r.id WHERE r.tenant_id=$1 AND r.purchase_order_id=$2 GROUP BY r.id`, [tenantId,purchaseOrderId]); return result.rows as GoodsReceiptProps[]; }); }
+  async listReturns(tenantId: TenantId, purchaseOrderId: EntityId) { return this.tenantTransaction(tenantId, async client => { const result = await client.query(`SELECT r.id,r.tenant_id AS "tenantId",r.organization_id AS "organizationId",r.site_id AS "siteId",r.purchase_order_id AS "purchaseOrderId",r.supplier_id AS "supplierId",r.reason,r.returned_by AS "returnedBy",r.returned_at AS "returnedAt",COALESCE(jsonb_agg(jsonb_build_object('partId',l.part_id,'quantity',l.quantity::float8)) FILTER(WHERE l.part_id IS NOT NULL),'[]') AS lines FROM supplier_returns r LEFT JOIN supplier_return_lines l ON l.tenant_id=r.tenant_id AND l.supplier_return_id=r.id WHERE r.tenant_id=$1 AND r.purchase_order_id=$2 GROUP BY r.id`, [tenantId,purchaseOrderId]); return result.rows as SupplierReturnProps[]; }); }
+  async listReplenishmentAlerts(tenantId: TenantId, organizationId: EntityId, siteId: EntityId) { return this.tenantTransaction(tenantId, async client => { const result = await client.query(`SELECT p.tenant_id AS "tenantId",p.organization_id AS "organizationId",site.id AS "siteId",p.id AS "partId",p.sku,p.name,(COALESCE(s.on_hand,0)-COALESCE(s.reserved,0))::float8 AS available,p.reorder_point::float8 AS "reorderPoint",p.reorder_quantity::float8 AS "suggestedQuantity" FROM parts p JOIN sites site ON site.tenant_id=p.tenant_id AND site.organization_id=p.organization_id AND site.id=$3 LEFT JOIN stock_positions s ON s.tenant_id=p.tenant_id AND s.part_id=p.id AND s.site_id=site.id WHERE p.tenant_id=$1 AND p.organization_id=$2 AND p.active AND COALESCE(s.on_hand,0)-COALESCE(s.reserved,0)<=p.reorder_point ORDER BY p.sku`, [tenantId,organizationId,siteId]); return result.rows as ReplenishmentAlertProps[]; }); }
 
   async withPurchaseOrderLock<T>(tenantId: TenantId, purchaseOrderId: EntityId, operation: (repository: InventoryRepository) => Promise<T>): Promise<T> {
     return this.tenantTransaction(tenantId, async client => {
@@ -50,6 +52,22 @@ export class PostgresInventoryRepository implements InventoryRepository {
       for (const value of positions) await client.query(`INSERT INTO stock_positions(tenant_id,site_id,part_id,on_hand,reserved,average_unit_cost_cents,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(tenant_id,site_id,part_id) DO UPDATE SET on_hand=EXCLUDED.on_hand,reserved=EXCLUDED.reserved,average_unit_cost_cents=EXCLUDED.average_unit_cost_cents,updated_at=EXCLUDED.updated_at`, [value.tenantId,value.siteId,value.partId,value.onHand,value.reserved,value.averageUnitCostCents,value.updatedAt]);
       await client.query(`UPDATE purchase_orders SET status=$3 WHERE tenant_id=$1 AND id=$2`, [order.tenantId,order.id,order.status]);
       await client.query(`INSERT INTO outbox_events(id,tenant_id,aggregate_id,event_type,payload,occurred_at) VALUES(gen_random_uuid(),$1,$2,'inventory.goods_received.v1',$3,$4)`, [receipt.tenantId,receipt.id,JSON.stringify({organizationId:receipt.organizationId,siteId:receipt.siteId,purchaseOrderId:receipt.purchaseOrderId,status:order.status}),receipt.receivedAt]);
+    });
+  }
+
+  async closePurchaseOrder(order: Readonly<PurchaseOrderProps>, closedBy: EntityId, closedAt: string) {
+    await this.tenantTransaction(order.tenantId, async client => {
+      await client.query(`UPDATE purchase_orders SET status=$3 WHERE tenant_id=$1 AND id=$2`, [order.tenantId,order.id,order.status]);
+      await client.query(`INSERT INTO outbox_events(id,tenant_id,aggregate_id,event_type,payload,occurred_at) VALUES(gen_random_uuid(),$1,$2,'inventory.purchase_remainder_closed.v1',$3,$4)`, [order.tenantId,order.id,JSON.stringify({organizationId:order.organizationId,siteId:order.siteId,status:order.status,closedBy}),closedAt]);
+    });
+  }
+
+  async returnPurchaseOrder(value: Readonly<SupplierReturnProps>, positions: readonly Readonly<StockPositionProps>[]) {
+    await this.tenantTransaction(value.tenantId, async client => {
+      await client.query(`INSERT INTO supplier_returns(id,tenant_id,organization_id,site_id,purchase_order_id,supplier_id,reason,returned_by,returned_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [value.id,value.tenantId,value.organizationId,value.siteId,value.purchaseOrderId,value.supplierId,value.reason,value.returnedBy,value.returnedAt]);
+      for (const line of value.lines) await client.query(`INSERT INTO supplier_return_lines(tenant_id,supplier_return_id,part_id,quantity) VALUES($1,$2,$3,$4)`, [value.tenantId,value.id,line.partId,line.quantity]);
+      for (const position of positions) await client.query(`UPDATE stock_positions SET on_hand=$4,updated_at=$5 WHERE tenant_id=$1 AND site_id=$2 AND part_id=$3`, [position.tenantId,position.siteId,position.partId,position.onHand,position.updatedAt]);
+      await client.query(`INSERT INTO outbox_events(id,tenant_id,aggregate_id,event_type,payload,occurred_at) VALUES(gen_random_uuid(),$1,$2,'inventory.supplier_returned.v1',$3,$4)`, [value.tenantId,value.id,JSON.stringify({organizationId:value.organizationId,siteId:value.siteId,purchaseOrderId:value.purchaseOrderId,supplierId:value.supplierId}),value.returnedAt]);
     });
   }
 }
