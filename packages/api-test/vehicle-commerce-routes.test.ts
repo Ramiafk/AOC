@@ -1,15 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { AuditRecorder,InMemoryAuditSink } from "../audit/src/audit.ts";
+import { AuditRecorder, InMemoryAuditSink } from "../audit/src/audit.ts";
 import { Membership } from "../organizations/src/access-control.ts";
-import { tenantId,type EntityId } from "../core/src/identity.ts";
+import { tenantId, type EntityId } from "../core/src/identity.ts";
 import { ManageVehicleCommerce } from "../vehicle-commerce/src/vehicle-commerce.ts";
 import { InMemoryVehicleCommerceRepository } from "../vehicle-commerce/src/in-memory-vehicle-commerce-repository.ts";
 import { PlatformApplication } from "../../apps/api/src/application.ts";
 import { buildApp } from "../../apps/api/src/build-app.ts";
-import { MapTokenVerifier,RequestContextResolver } from "../../apps/api/src/context-resolver.ts";
+import {
+  MapTokenVerifier,
+  RequestContextResolver,
+} from "../../apps/api/src/context-resolver.ts";
 import { InMemoryPlatformRepository } from "../../apps/api/src/in-memory-platform-repository.ts";
-import { InMemoryMembershipReader,RouteAuthorizer } from "../../apps/api/src/route-authorizer.ts";
+import {
+  InMemoryMembershipReader,
+  RouteAuthorizer,
+} from "../../apps/api/src/route-authorizer.ts";
 
 test("publishes, sells, delivers and transfers a vehicle through scoped HTTP routes", async () => {
   const tenant = "11111111-1111-4111-8111-111111111111",
@@ -194,4 +200,203 @@ test("publishes, sells, delivers and transfers a vehicle through scoped HTTP rou
   await app.close();
 });
 
-test("issues a scoped cession dossier through HTTP",async()=>{const tenant="21111111-1111-4111-8111-111111111111",actor="2aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as EntityId,organizationId="2bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" as EntityId,siteId="2ccccccc-cccc-4ccc-8ccc-cccccccccccc" as EntityId,assetId="2ddddddd-dddd-4ddd-8ddd-dddddddddddd" as EntityId,stockItemId="2eeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" as EntityId,customerId="2fffffff-ffff-4fff-8fff-ffffffffffff" as EntityId,certificateDocumentId="27777777-7777-4777-8777-777777777777" as EntityId,deliveryReceiptDocumentId="28888888-8888-4888-8888-888888888888" as EntityId,transferId="29999999-9999-4999-8999-999999999999" as EntityId;const repository=new InMemoryVehicleCommerceRepository();repository.items.push({id:stockItemId,tenantId:tenantId(tenant),organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:1,status:"delivered",createdBy:actor,createdAt:"2026-07-22T10:00:00Z",updatedAt:"2026-07-22T10:00:00Z"});repository.transfers.push({id:transferId,tenantId:tenantId(tenant),organizationId,siteId,stockItemId,saleId:actor,deliveryId:actor,assetId,previousOwnerCustomerId:actor,newOwnerCustomerId:customerId,documentIds:[],evidenceHash:"a".repeat(64),transferredBy:actor,transferredAt:"2026-07-22T10:00:00Z"});const certificateKey=`${tenant}:${assetId}:${certificateDocumentId}`,receiptKey=`${tenant}:${assetId}:${deliveryReceiptDocumentId}`;repository.documentKinds.set(certificateKey,"cession_certificate");repository.documentKinds.set(receiptKey,"delivery_receipt");repository.documentOwners.set(certificateKey,customerId);repository.documentOwners.set(receiptKey,customerId);const membership=Membership.create({tenantId:tenantId(tenant),organizationId,userId:actor,role:"owner",siteIds:[],extraPermissions:[]}).snapshot(),contexts=new RequestContextResolver(new MapTokenVerifier(new Map([["cession-token",{tenantId:tenant,actorId:actor}]]))),commerce=new ManageVehicleCommerce(repository,()=>new Date("2026-07-22T10:00:00Z")),app=buildApp({application:new PlatformApplication(new InMemoryPlatformRepository(),new AuditRecorder(new InMemoryAuditSink())),contexts,authorizer:new RouteAuthorizer(new InMemoryMembershipReader([membership])),modules:{vehicleCommerce:commerce}});const response=await app.inject({method:"POST",url:`/v1/vehicle-stock/${stockItemId}/cession-dossier`,headers:{authorization:"Bearer cession-token"},payload:{certificateDocumentId,deliveryReceiptDocumentId}});assert.equal(response.statusCode,200);assert.equal(response.json().customerId,customerId);const duplicate=await app.inject({method:"POST",url:`/v1/vehicle-stock/${stockItemId}/cession-dossier`,headers:{authorization:"Bearer cession-token"},payload:{certificateDocumentId,deliveryReceiptDocumentId}});assert.equal(duplicate.statusCode,422);assert.equal(duplicate.json().error,"CESSION_DOSSIER_ALREADY_ISSUED");await app.close();});
+test("issues a scoped cession dossier through HTTP", async () => {
+  const tenant = "21111111-1111-4111-8111-111111111111",
+    actor = "2aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as EntityId,
+    organizationId = "2bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" as EntityId,
+    siteId = "2ccccccc-cccc-4ccc-8ccc-cccccccccccc" as EntityId,
+    assetId = "2ddddddd-dddd-4ddd-8ddd-dddddddddddd" as EntityId,
+    stockItemId = "2eeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" as EntityId,
+    customerId = "2fffffff-ffff-4fff-8fff-ffffffffffff" as EntityId,
+    certificateDocumentId = "27777777-7777-4777-8777-777777777777" as EntityId,
+    deliveryReceiptDocumentId =
+      "28888888-8888-4888-8888-888888888888" as EntityId,
+    transferId = "29999999-9999-4999-8999-999999999999" as EntityId;
+  const repository = new InMemoryVehicleCommerceRepository();
+  repository.items.push({
+    id: stockItemId,
+    tenantId: tenantId(tenant),
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 1,
+    status: "delivered",
+    createdBy: actor,
+    createdAt: "2026-07-22T10:00:00Z",
+    updatedAt: "2026-07-22T10:00:00Z",
+  });
+  repository.transfers.push({
+    id: transferId,
+    tenantId: tenantId(tenant),
+    organizationId,
+    siteId,
+    stockItemId,
+    saleId: actor,
+    deliveryId: actor,
+    assetId,
+    previousOwnerCustomerId: actor,
+    newOwnerCustomerId: customerId,
+    documentIds: [],
+    evidenceHash: "a".repeat(64),
+    transferredBy: actor,
+    transferredAt: "2026-07-22T10:00:00Z",
+  });
+  const certificateKey = `${tenant}:${assetId}:${certificateDocumentId}`,
+    receiptKey = `${tenant}:${assetId}:${deliveryReceiptDocumentId}`;
+  repository.documentKinds.set(certificateKey, "cession_certificate");
+  repository.documentKinds.set(receiptKey, "delivery_receipt");
+  repository.documentOwners.set(certificateKey, customerId);
+  repository.documentOwners.set(receiptKey, customerId);
+  const membership = Membership.create({
+      tenantId: tenantId(tenant),
+      organizationId,
+      userId: actor,
+      role: "owner",
+      siteIds: [],
+      extraPermissions: [],
+    }).snapshot(),
+    contexts = new RequestContextResolver(
+      new MapTokenVerifier(
+        new Map([["cession-token", { tenantId: tenant, actorId: actor }]]),
+      ),
+    ),
+    commerce = new ManageVehicleCommerce(
+      repository,
+      () => new Date("2026-07-22T10:00:00Z"),
+    ),
+    app = buildApp({
+      application: new PlatformApplication(
+        new InMemoryPlatformRepository(),
+        new AuditRecorder(new InMemoryAuditSink()),
+      ),
+      contexts,
+      authorizer: new RouteAuthorizer(
+        new InMemoryMembershipReader([membership]),
+      ),
+      modules: { vehicleCommerce: commerce },
+    });
+  const response = await app.inject({
+    method: "POST",
+    url: `/v1/vehicle-stock/${stockItemId}/cession-dossier`,
+    headers: { authorization: "Bearer cession-token" },
+    payload: { certificateDocumentId, deliveryReceiptDocumentId },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().customerId, customerId);
+  const duplicate = await app.inject({
+    method: "POST",
+    url: `/v1/vehicle-stock/${stockItemId}/cession-dossier`,
+    headers: { authorization: "Bearer cession-token" },
+    payload: { certificateDocumentId, deliveryReceiptDocumentId },
+  });
+  assert.equal(duplicate.statusCode, 422);
+  assert.equal(duplicate.json().error, "CESSION_DOSSIER_ALREADY_ISSUED");
+  await app.close();
+});
+
+test("refuses auction guarantee authorization outside organization and site scope", async () => {
+  const tenant = "31111111-1111-4111-8111-111111111111";
+  const organizationId = "3aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as EntityId;
+  const otherOrganizationId = "3bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" as EntityId;
+  const siteId = "3ccccccc-cccc-4ccc-8ccc-cccccccccccc" as EntityId;
+  const otherSiteId = "3ddddddd-dddd-4ddd-8ddd-dddddddddddd" as EntityId;
+  const stockItemId = "3eeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" as EntityId;
+  const assetId = "3fffffff-ffff-4fff-8fff-ffffffffffff" as EntityId;
+  const auctionId = "37777777-7777-4777-8777-777777777777" as EntityId;
+  const bidderCustomerId = "38888888-8888-4888-8888-888888888888" as EntityId;
+  const wrongOrganizationActor = "39999999-9999-4999-8999-999999999991" as EntityId;
+  const wrongSiteActor = "39999999-9999-4999-8999-999999999992" as EntityId;
+  const repository = new InMemoryVehicleCommerceRepository();
+  repository.items.push({
+    id: stockItemId,
+    tenantId: tenantId(tenant),
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 100,
+    askingPriceCents: 200,
+    status: "published",
+    createdBy: wrongSiteActor,
+    createdAt: "2026-07-22T10:00:00Z",
+    updatedAt: "2026-07-22T10:00:00Z",
+  });
+  repository.auctions.push({
+    id: auctionId,
+    tenantId: tenantId(tenant),
+    organizationId,
+    siteId,
+    stockItemId,
+    channel: "central_marketplace",
+    startingPriceCents: 100,
+    reservePriceCents: 150,
+    minimumIncrementCents: 10,
+    guaranteeAmountCents: 50,
+    currency: "EUR",
+    guaranteeRequired: true,
+    startsAt: "2026-07-22T10:00:00Z",
+    endsAt: "2026-07-23T10:00:00Z",
+    status: "scheduled",
+    createdBy: wrongSiteActor,
+    createdAt: "2026-07-22T10:00:00Z",
+  });
+  repository.customers.add(`${tenant}:${bidderCustomerId}`);
+  const memberships = [
+    Membership.create({
+      tenantId: tenantId(tenant),
+      organizationId: otherOrganizationId,
+      userId: wrongOrganizationActor,
+      role: "owner",
+      siteIds: [],
+      extraPermissions: [],
+    }).snapshot(),
+    Membership.create({
+      tenantId: tenantId(tenant),
+      organizationId,
+      userId: wrongSiteActor,
+      role: "manager",
+      siteIds: [otherSiteId],
+      extraPermissions: [],
+    }).snapshot(),
+  ];
+  const app = buildApp({
+    application: new PlatformApplication(
+      new InMemoryPlatformRepository(),
+      new AuditRecorder(new InMemoryAuditSink()),
+    ),
+    contexts: new RequestContextResolver(
+      new MapTokenVerifier(
+        new Map([
+          ["wrong-org", { tenantId: tenant, actorId: wrongOrganizationActor }],
+          ["wrong-site", { tenantId: tenant, actorId: wrongSiteActor }],
+        ]),
+      ),
+    ),
+    authorizer: new RouteAuthorizer(new InMemoryMembershipReader(memberships)),
+    modules: {
+      vehicleCommerce: new ManageVehicleCommerce(
+        repository,
+        () => new Date("2026-07-22T11:00:00Z"),
+      ),
+    },
+  });
+  for (const token of ["wrong-org", "wrong-site"]) {
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/vehicle-stock/${stockItemId}/auctions/${auctionId}/guarantees`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        bidderCustomerId,
+        provider: "test_psp",
+        providerReference: `auth-${token}`,
+        idempotencyKey: `guarantee-${token}`,
+        amountCents: 50,
+        currency: "EUR",
+      },
+    });
+    assert.equal(response.statusCode, 403);
+  }
+  assert.equal(repository.auctionGuarantees.length, 0);
+  await app.close();
+});

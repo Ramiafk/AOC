@@ -4,7 +4,7 @@
 
 Une offre d'enchère véhicule exige désormais une garantie préalablement autorisée pour le même tenant, la même organisation, le même site, la même enchère et le même enchérisseur.
 
-Le montant et la devise sont définis lors de la programmation de l'enchère. Par défaut, la garantie correspond au maximum entre 500 € et 5 % du prix de départ. L'autorisation est idempotente par tenant et référence également la confirmation du prestataire de paiement, sans stocker de donnée de carte.
+Le montant et la devise sont définis lors de la programmation de l'enchère. Par défaut, la garantie correspond au maximum entre 500 € et 5 % du prix de départ. L'autorisation référence la confirmation du prestataire de paiement, sans stocker de donnée de carte. Un replay idempotent ne retourne l'autorisation précédente que si son payload canonique (périmètre, enchérisseur, prestataire, référence, montant et devise) est strictement identique ; toute collision produit l'erreur stable `AUCTION_GUARANTEE_IDEMPOTENCY_CONFLICT`.
 
 ## Invariants
 
@@ -15,6 +15,12 @@ Le montant et la devise sont définis lors de la programmation de l'enchère. Pa
 - sans adjudication, lors d'une vente directe ou d'un retrait, toutes les garanties ouvertes sont libérées ;
 - chaque autorisation, capture ou libération produit un événement outbox dans la transaction métier ;
 - les tables sont protégées par RLS forcée et par des clés étrangères composites de périmètre.
+
+## Compatibilité de migration 5H → 5I
+
+La migration immuable `027` ne fabrique aucune autorisation de paiement rétroactive. Les enchères et offres créées avant son application sont marquées comme historiques (`guarantee_required = false`) et conservent un `guarantee_id` nul. Elles restent consultables et peuvent être clôturées normalement afin de préserver l'historique 5H.
+
+Après la migration, chaque nouvelle enchère est créée avec `guarantee_required = true`. Une nouvelle offre hérite également de ce mode et PostgreSQL exige alors une garantie réelle du même enchérisseur. Il est volontairement impossible d'ajouter une nouvelle offre à une enchère historique non garantie.
 
 ## API
 
@@ -28,7 +34,7 @@ Ce lot enregistre une autorisation déjà confirmée par un prestataire. L'adapt
 
 ## Vérification
 
-- tests métier : garantie obligatoire, capture gagnante, libération des perdants et clôture sans vente ;
-- tests HTTP : autorisation avant offre et libération lors d'une vente directe ;
-- tests PostgreSQL : incohérence enchérisseur/garantie rejetée, périmètre organisation/site rejeté, statuts finaux et outbox ;
+- tests métier : garantie obligatoire, replay canonique, conflits d'idempotence, capture gagnante, libération des perdants et clôture sans vente ;
+- tests HTTP : autorisation avant offre, refus organisation/site et libération lors d'une vente directe ;
+- tests PostgreSQL : montée peuplée 026→027, montant/devise incohérents, RLS inter-tenant, périmètre organisation/site, statuts finaux et outbox ;
 - CI PostgreSQL 17 : typecheck, tests, migrations et contrôles d'architecture.

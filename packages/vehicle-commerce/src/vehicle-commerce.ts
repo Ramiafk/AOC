@@ -1,112 +1,1418 @@
 import { createHash } from "node:crypto";
 import { invariant } from "../../core/src/errors.ts";
-import { newEntityId, type EntityId, type RequestContext, type TenantId, type TenantScoped } from "../../core/src/identity.ts";
+import {
+  newEntityId,
+  type EntityId,
+  type RequestContext,
+  type TenantId,
+  type TenantScoped,
+} from "../../core/src/identity.ts";
 
 export type AcquisitionMode = "purchase" | "trade_in" | "consignment";
-export type VehicleStockStatus = "acquired" | "preparing" | "ready" | "published" | "withdrawn" | "sold" | "delivered";
-export type PublicationChannel = "professional_website" | "professional_app" | "central_marketplace";
+export type VehicleStockStatus =
+  | "acquired"
+  | "preparing"
+  | "ready"
+  | "published"
+  | "withdrawn"
+  | "sold"
+  | "delivered";
+export type PublicationChannel =
+  | "professional_website"
+  | "professional_app"
+  | "central_marketplace";
 
-export interface VehicleStockItemProps extends TenantScoped { id: EntityId; organizationId: EntityId; siteId: EntityId; assetId: EntityId; acquisitionMode: AcquisitionMode; acquisitionCostCents: number; askingPriceCents?: number | undefined; status: VehicleStockStatus; createdBy: EntityId; createdAt: string; updatedAt: string }
-export interface VehiclePublicationProps extends TenantScoped { id: EntityId; organizationId: EntityId; siteId: EntityId; stockItemId: EntityId; channel: PublicationChannel; askingPriceCents: number; status: "published" | "withdrawn"; publishedBy: EntityId; publishedAt: string }
-export interface VehiclePreparationCheckProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; label:string; required:boolean; completedBy?:EntityId|undefined; completedAt?:string|undefined; createdAt:string }
-export interface VehicleMediaProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; kind:"image"|"video"; storageKey:string; position:number; primary:boolean; createdBy:EntityId; createdAt:string }
-export interface VehicleSaleProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; buyerCustomerId:EntityId; salePriceCents:number; acquisitionCostCents:number; grossMarginCents:number; soldBy:EntityId; soldAt:string }
-export interface VehicleDeliveryProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; saleId:EntityId; status:"scheduled"|"completed"; plannedAt:string; handoverOdometerKm?:number|undefined; notes?:string|undefined; scheduledBy:EntityId; completedBy?:EntityId|undefined; completedAt?:string|undefined; createdAt:string }
-export interface VehicleOwnershipTransferProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; saleId:EntityId; deliveryId:EntityId; assetId:EntityId; previousOwnerCustomerId:EntityId; newOwnerCustomerId:EntityId; documentIds:readonly EntityId[]; evidenceHash:string; transferredBy:EntityId; transferredAt:string }
-export interface VehicleCessionDossierProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; transferId:EntityId; assetId:EntityId; customerId:EntityId; certificateDocumentId:EntityId; deliveryReceiptDocumentId:EntityId; issuedBy:EntityId; issuedAt:string }
-export type FlashSaleClosureReason="cancelled"|"expired"|"sold"|"withdrawn";
-export interface VehicleFlashSaleProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; priceCents:number; startsAt:string; endsAt:string; channels:readonly PublicationChannel[]; status:"scheduled"|"cancelled"|"expired"|"closed"; createdBy:EntityId; createdAt:string; closedReason?:FlashSaleClosureReason|undefined; closedBy?:EntityId|undefined; closedAt?:string|undefined }
-export interface VehicleAuctionProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; stockItemId:EntityId; channel:PublicationChannel; startingPriceCents:number; reservePriceCents:number; minimumIncrementCents:number; guaranteeAmountCents:number; currency:string; startsAt:string; endsAt:string; status:"scheduled"|"sold"|"unsold"|"cancelled"; createdBy:EntityId; createdAt:string; winnerCustomerId?:EntityId|undefined; winningBidId?:EntityId|undefined; closedReason?:"reserve_met"|"reserve_not_met"|"direct_sale"|"withdrawn"|undefined; closedBy?:EntityId|undefined; closedAt?:string|undefined }
-export interface VehicleAuctionGuaranteeProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; auctionId:EntityId; stockItemId:EntityId; bidderCustomerId:EntityId; provider:string; providerReference:string; idempotencyKey:string; amountCents:number; currency:string; status:"authorized"|"captured"|"released"; authorizedAt:string; closedAt?:string|undefined; closedReason?:"winner"|"lost"|"unsold"|"direct_sale"|"withdrawn"|undefined }
-export interface VehicleAuctionBidProps extends TenantScoped { id:EntityId; organizationId:EntityId; siteId:EntityId; auctionId:EntityId; stockItemId:EntityId; bidderCustomerId:EntityId; guaranteeId:EntityId; amountCents:number; placedAt:string }
+export interface VehicleStockItemProps extends TenantScoped {
+  id: EntityId;
+  organizationId: EntityId;
+  siteId: EntityId;
+  assetId: EntityId;
+  acquisitionMode: AcquisitionMode;
+  acquisitionCostCents: number;
+  askingPriceCents?: number | undefined;
+  status: VehicleStockStatus;
+  createdBy: EntityId;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface VehiclePublicationProps extends TenantScoped {
+  id: EntityId;
+  organizationId: EntityId;
+  siteId: EntityId;
+  stockItemId: EntityId;
+  channel: PublicationChannel;
+  askingPriceCents: number;
+  status: "published" | "withdrawn";
+  publishedBy: EntityId;
+  publishedAt: string;
+}
+export interface VehiclePreparationCheckProps extends TenantScoped {
+  id: EntityId;
+  organizationId: EntityId;
+  siteId: EntityId;
+  stockItemId: EntityId;
+  label: string;
+  required: boolean;
+  completedBy?: EntityId | undefined;
+  completedAt?: string | undefined;
+  createdAt: string;
+}
+export interface VehicleMediaProps extends TenantScoped {
+  id: EntityId;
+  organizationId: EntityId;
+  siteId: EntityId;
+  stockItemId: EntityId;
+  kind: "image" | "video";
+  storageKey: string;
+  position: number;
+  primary: boolean;
+  createdBy: EntityId;
+  createdAt: string;
+}
+export interface VehicleSaleProps extends TenantScoped {
+  id: EntityId;
+  organizationId: EntityId;
+  siteId: EntityId;
+  stockItemId: EntityId;
+  buyerCustomerId: EntityId;
+  salePriceCents: number;
+  acquisitionCostCents: number;
+  grossMarginCents: number;
+  soldBy: EntityId;
+  soldAt: string;
+}
+export interface VehicleDeliveryProps extends TenantScoped {
+  id: EntityId;
+  organizationId: EntityId;
+  siteId: EntityId;
+  stockItemId: EntityId;
+  saleId: EntityId;
+  status: "scheduled" | "completed";
+  plannedAt: string;
+  handoverOdometerKm?: number | undefined;
+  notes?: string | undefined;
+  scheduledBy: EntityId;
+  completedBy?: EntityId | undefined;
+  completedAt?: string | undefined;
+  createdAt: string;
+}
+export interface VehicleOwnershipTransferProps extends TenantScoped {
+  id: EntityId;
+  organizationId: EntityId;
+  siteId: EntityId;
+  stockItemId: EntityId;
+  saleId: EntityId;
+  deliveryId: EntityId;
+  assetId: EntityId;
+  previousOwnerCustomerId: EntityId;
+  newOwnerCustomerId: EntityId;
+  documentIds: readonly EntityId[];
+  evidenceHash: string;
+  transferredBy: EntityId;
+  transferredAt: string;
+}
+export interface VehicleCessionDossierProps extends TenantScoped {
+  id: EntityId;
+  organizationId: EntityId;
+  siteId: EntityId;
+  stockItemId: EntityId;
+  transferId: EntityId;
+  assetId: EntityId;
+  customerId: EntityId;
+  certificateDocumentId: EntityId;
+  deliveryReceiptDocumentId: EntityId;
+  issuedBy: EntityId;
+  issuedAt: string;
+}
+export type FlashSaleClosureReason =
+  | "cancelled"
+  | "expired"
+  | "sold"
+  | "withdrawn";
+export interface VehicleFlashSaleProps extends TenantScoped {
+  id: EntityId;
+  organizationId: EntityId;
+  siteId: EntityId;
+  stockItemId: EntityId;
+  priceCents: number;
+  startsAt: string;
+  endsAt: string;
+  channels: readonly PublicationChannel[];
+  status: "scheduled" | "cancelled" | "expired" | "closed";
+  createdBy: EntityId;
+  createdAt: string;
+  closedReason?: FlashSaleClosureReason | undefined;
+  closedBy?: EntityId | undefined;
+  closedAt?: string | undefined;
+}
+export interface VehicleAuctionProps extends TenantScoped {
+  id: EntityId;
+  organizationId: EntityId;
+  siteId: EntityId;
+  stockItemId: EntityId;
+  channel: PublicationChannel;
+  startingPriceCents: number;
+  reservePriceCents: number;
+  minimumIncrementCents: number;
+  guaranteeAmountCents: number;
+  currency: string;
+  guaranteeRequired: boolean;
+  startsAt: string;
+  endsAt: string;
+  status: "scheduled" | "sold" | "unsold" | "cancelled";
+  createdBy: EntityId;
+  createdAt: string;
+  winnerCustomerId?: EntityId | undefined;
+  winningBidId?: EntityId | undefined;
+  closedReason?:
+    | "reserve_met"
+    | "reserve_not_met"
+    | "direct_sale"
+    | "withdrawn"
+    | undefined;
+  closedBy?: EntityId | undefined;
+  closedAt?: string | undefined;
+}
+export interface VehicleAuctionGuaranteeProps extends TenantScoped {
+  id: EntityId;
+  organizationId: EntityId;
+  siteId: EntityId;
+  auctionId: EntityId;
+  stockItemId: EntityId;
+  bidderCustomerId: EntityId;
+  provider: string;
+  providerReference: string;
+  idempotencyKey: string;
+  amountCents: number;
+  currency: string;
+  status: "authorized" | "captured" | "released";
+  authorizedAt: string;
+  closedAt?: string | undefined;
+  closedReason?:
+    | "winner"
+    | "lost"
+    | "unsold"
+    | "direct_sale"
+    | "withdrawn"
+    | undefined;
+}
+export interface VehicleAuctionBidProps extends TenantScoped {
+  id: EntityId;
+  organizationId: EntityId;
+  siteId: EntityId;
+  auctionId: EntityId;
+  stockItemId: EntityId;
+  bidderCustomerId: EntityId;
+  guaranteeId?: EntityId | undefined;
+  amountCents: number;
+  placedAt: string;
+}
 
 export interface VehicleCommerceRepository {
   assetExists(tenantId: TenantId, assetId: EntityId): Promise<boolean>;
-  siteBelongsToOrganization(tenantId: TenantId, organizationId: EntityId, siteId: EntityId): Promise<boolean>;
-  customerExists(tenantId:TenantId,customerId:EntityId):Promise<boolean>;
-  findSale(tenantId:TenantId,stockItemId:EntityId):Promise<Readonly<VehicleSaleProps>|null>;
-  findDelivery(tenantId:TenantId,stockItemId:EntityId):Promise<Readonly<VehicleDeliveryProps>|null>;
-  assetOwnerCustomerId(tenantId:TenantId,assetId:EntityId):Promise<EntityId|null>;
-  documentsBelongToAsset(tenantId:TenantId,assetId:EntityId,documentIds:readonly EntityId[]):Promise<boolean>;
-  documentsMatchKinds(tenantId:TenantId,assetId:EntityId,ownerCustomerId:EntityId,documents:Readonly<Record<EntityId,string>>):Promise<boolean>;
-  findOwnershipTransfer(tenantId:TenantId,stockItemId:EntityId):Promise<Readonly<VehicleOwnershipTransferProps>|null>;
-  findCessionDossier(tenantId:TenantId,stockItemId:EntityId):Promise<Readonly<VehicleCessionDossierProps>|null>;
-  findOpenFlashSale(tenantId:TenantId,stockItemId:EntityId,at:string):Promise<Readonly<VehicleFlashSaleProps>|null>;
-  findLatestFlashSale(tenantId:TenantId,stockItemId:EntityId):Promise<Readonly<VehicleFlashSaleProps>|null>;
-  expireFlashSales(tenantId:TenantId,stockItemId:EntityId,at:string):Promise<void>;
-  findOpenAuction(tenantId:TenantId,stockItemId:EntityId):Promise<Readonly<VehicleAuctionProps>|null>;
-  listAuctionBids(tenantId:TenantId,auctionId:EntityId):Promise<readonly Readonly<VehicleAuctionBidProps>[]>;
-  findAuctionGuarantee(tenantId:TenantId,auctionId:EntityId,bidderCustomerId:EntityId):Promise<Readonly<VehicleAuctionGuaranteeProps>|null>;
+  siteBelongsToOrganization(
+    tenantId: TenantId,
+    organizationId: EntityId,
+    siteId: EntityId,
+  ): Promise<boolean>;
+  customerExists(tenantId: TenantId, customerId: EntityId): Promise<boolean>;
+  findSale(
+    tenantId: TenantId,
+    stockItemId: EntityId,
+  ): Promise<Readonly<VehicleSaleProps> | null>;
+  findDelivery(
+    tenantId: TenantId,
+    stockItemId: EntityId,
+  ): Promise<Readonly<VehicleDeliveryProps> | null>;
+  assetOwnerCustomerId(
+    tenantId: TenantId,
+    assetId: EntityId,
+  ): Promise<EntityId | null>;
+  documentsBelongToAsset(
+    tenantId: TenantId,
+    assetId: EntityId,
+    documentIds: readonly EntityId[],
+  ): Promise<boolean>;
+  documentsMatchKinds(
+    tenantId: TenantId,
+    assetId: EntityId,
+    ownerCustomerId: EntityId,
+    documents: Readonly<Record<EntityId, string>>,
+  ): Promise<boolean>;
+  findOwnershipTransfer(
+    tenantId: TenantId,
+    stockItemId: EntityId,
+  ): Promise<Readonly<VehicleOwnershipTransferProps> | null>;
+  findCessionDossier(
+    tenantId: TenantId,
+    stockItemId: EntityId,
+  ): Promise<Readonly<VehicleCessionDossierProps> | null>;
+  findOpenFlashSale(
+    tenantId: TenantId,
+    stockItemId: EntityId,
+    at: string,
+  ): Promise<Readonly<VehicleFlashSaleProps> | null>;
+  findLatestFlashSale(
+    tenantId: TenantId,
+    stockItemId: EntityId,
+  ): Promise<Readonly<VehicleFlashSaleProps> | null>;
+  expireFlashSales(
+    tenantId: TenantId,
+    stockItemId: EntityId,
+    at: string,
+  ): Promise<void>;
+  findOpenAuction(
+    tenantId: TenantId,
+    stockItemId: EntityId,
+  ): Promise<Readonly<VehicleAuctionProps> | null>;
+  listAuctionBids(
+    tenantId: TenantId,
+    auctionId: EntityId,
+  ): Promise<readonly Readonly<VehicleAuctionBidProps>[]>;
+  findAuctionGuarantee(
+    tenantId: TenantId,
+    auctionId: EntityId,
+    bidderCustomerId: EntityId,
+  ): Promise<Readonly<VehicleAuctionGuaranteeProps> | null>;
   saveStockItem(value: Readonly<VehicleStockItemProps>): Promise<void>;
-  findStockItem(tenantId: TenantId, id: EntityId): Promise<Readonly<VehicleStockItemProps> | null>;
-  listPublications(tenantId: TenantId, stockItemId: EntityId): Promise<readonly Readonly<VehiclePublicationProps>[]>;
-  savePreparationCheck(value:Readonly<VehiclePreparationCheckProps>):Promise<void>;
-  listPreparationChecks(tenantId:TenantId,stockItemId:EntityId):Promise<readonly Readonly<VehiclePreparationCheckProps>[]>;
-  saveMedia(value:Readonly<VehicleMediaProps>):Promise<void>;
-  listMedia(tenantId:TenantId,stockItemId:EntityId):Promise<readonly Readonly<VehicleMediaProps>[]>;
-  withStockItemLock<T>(tenantId: TenantId, stockItemId: EntityId, operation: (repository: VehicleCommerceRepository) => Promise<T>): Promise<T>;
-  publish(value: Readonly<VehiclePublicationProps>, stockItem: Readonly<VehicleStockItemProps>): Promise<void>;
-  markReady(stockItem:Readonly<VehicleStockItemProps>,readyBy:EntityId):Promise<void>;
-  sell(value:Readonly<VehicleSaleProps>,stockItem:Readonly<VehicleStockItemProps>):Promise<void>;
-  saveDelivery(value:Readonly<VehicleDeliveryProps>):Promise<void>;
-  completeDelivery(value:Readonly<VehicleDeliveryProps>,stockItem:Readonly<VehicleStockItemProps>):Promise<void>;
-  transferOwnership(value:Readonly<VehicleOwnershipTransferProps>):Promise<void>;
-  issueCessionDossier(value:Readonly<VehicleCessionDossierProps>):Promise<void>;
-  scheduleFlashSale(value:Readonly<VehicleFlashSaleProps>):Promise<void>;
-  cancelFlashSale(value:Readonly<VehicleFlashSaleProps>):Promise<void>;
-  withdrawStock(stockItem:Readonly<VehicleStockItemProps>,withdrawnBy:EntityId):Promise<void>;
-  scheduleAuction(value:Readonly<VehicleAuctionProps>):Promise<void>;
-  authorizeAuctionGuarantee(value:Readonly<VehicleAuctionGuaranteeProps>):Promise<Readonly<VehicleAuctionGuaranteeProps>>;
-  placeAuctionBid(value:Readonly<VehicleAuctionBidProps>):Promise<void>;
-  closeAuction(value:Readonly<VehicleAuctionProps>,sale?:Readonly<VehicleSaleProps>|undefined,stockItem?:Readonly<VehicleStockItemProps>|undefined):Promise<void>;
+  findStockItem(
+    tenantId: TenantId,
+    id: EntityId,
+  ): Promise<Readonly<VehicleStockItemProps> | null>;
+  listPublications(
+    tenantId: TenantId,
+    stockItemId: EntityId,
+  ): Promise<readonly Readonly<VehiclePublicationProps>[]>;
+  savePreparationCheck(
+    value: Readonly<VehiclePreparationCheckProps>,
+  ): Promise<void>;
+  listPreparationChecks(
+    tenantId: TenantId,
+    stockItemId: EntityId,
+  ): Promise<readonly Readonly<VehiclePreparationCheckProps>[]>;
+  saveMedia(value: Readonly<VehicleMediaProps>): Promise<void>;
+  listMedia(
+    tenantId: TenantId,
+    stockItemId: EntityId,
+  ): Promise<readonly Readonly<VehicleMediaProps>[]>;
+  withStockItemLock<T>(
+    tenantId: TenantId,
+    stockItemId: EntityId,
+    operation: (repository: VehicleCommerceRepository) => Promise<T>,
+  ): Promise<T>;
+  publish(
+    value: Readonly<VehiclePublicationProps>,
+    stockItem: Readonly<VehicleStockItemProps>,
+  ): Promise<void>;
+  markReady(
+    stockItem: Readonly<VehicleStockItemProps>,
+    readyBy: EntityId,
+  ): Promise<void>;
+  sell(
+    value: Readonly<VehicleSaleProps>,
+    stockItem: Readonly<VehicleStockItemProps>,
+  ): Promise<void>;
+  saveDelivery(value: Readonly<VehicleDeliveryProps>): Promise<void>;
+  completeDelivery(
+    value: Readonly<VehicleDeliveryProps>,
+    stockItem: Readonly<VehicleStockItemProps>,
+  ): Promise<void>;
+  transferOwnership(
+    value: Readonly<VehicleOwnershipTransferProps>,
+  ): Promise<void>;
+  issueCessionDossier(
+    value: Readonly<VehicleCessionDossierProps>,
+  ): Promise<void>;
+  scheduleFlashSale(value: Readonly<VehicleFlashSaleProps>): Promise<void>;
+  cancelFlashSale(value: Readonly<VehicleFlashSaleProps>): Promise<void>;
+  withdrawStock(
+    stockItem: Readonly<VehicleStockItemProps>,
+    withdrawnBy: EntityId,
+  ): Promise<void>;
+  scheduleAuction(value: Readonly<VehicleAuctionProps>): Promise<void>;
+  authorizeAuctionGuarantee(
+    value: Readonly<VehicleAuctionGuaranteeProps>,
+  ): Promise<Readonly<VehicleAuctionGuaranteeProps>>;
+  placeAuctionBid(value: Readonly<VehicleAuctionBidProps>): Promise<void>;
+  closeAuction(
+    value: Readonly<VehicleAuctionProps>,
+    sale?: Readonly<VehicleSaleProps> | undefined,
+    stockItem?: Readonly<VehicleStockItemProps> | undefined,
+  ): Promise<void>;
 }
 
 export class ManageVehicleCommerce {
   private readonly repository: VehicleCommerceRepository;
   private readonly now: () => Date;
-  constructor(repository: VehicleCommerceRepository, now = () => new Date()) { this.repository=repository; this.now=now; }
-
-  async acquire(context: RequestContext, input: { organizationId: EntityId; siteId: EntityId; assetId: EntityId; acquisitionMode: AcquisitionMode; acquisitionCostCents: number }) {
-    invariant(input.acquisitionCostCents >= 0, "INVALID_ACQUISITION_COST", "Acquisition cost must be positive or zero");
-    invariant(await this.repository.siteBelongsToOrganization(context.tenantId,input.organizationId,input.siteId), "SITE_SCOPE_MISMATCH", "Site does not belong to this organization");
-    invariant(await this.repository.assetExists(context.tenantId,input.assetId), "ASSET_NOT_FOUND", "Asset was not found");
-    const now=this.now().toISOString();
-    const value: VehicleStockItemProps={id:newEntityId(),tenantId:context.tenantId,...input,status:"acquired",createdBy:context.actorId,createdAt:now,updatedAt:now};
-    await this.repository.saveStockItem(value); return value;
+  constructor(repository: VehicleCommerceRepository, now = () => new Date()) {
+    this.repository = repository;
+    this.now = now;
   }
 
-  async startPreparation(context: RequestContext, id: EntityId) { return this.transition(context,id,"acquired","preparing","STOCK_ITEM_NOT_ACQUIRED"); }
-  async addPreparationCheck(context:RequestContext,id:EntityId,input:{label:string;required:boolean}){return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const value=await this.item(context.tenantId,id,repository);invariant(value.status==="preparing","STOCK_ITEM_NOT_PREPARING","Stock item is not being prepared");invariant(input.label.trim().length>=2,"INVALID_PREPARATION_CHECK","Preparation check is invalid");const check:VehiclePreparationCheckProps={id:newEntityId(),tenantId:context.tenantId,organizationId:value.organizationId,siteId:value.siteId,stockItemId:id,label:input.label.trim(),required:input.required,createdAt:this.now().toISOString()};await repository.savePreparationCheck(check);return check;});}
-  async completePreparationCheck(context:RequestContext,stockItemId:EntityId,checkId:EntityId){return this.repository.withStockItemLock(context.tenantId,stockItemId,async repository=>{const value=await this.item(context.tenantId,stockItemId,repository);invariant(value.status==="preparing","STOCK_ITEM_NOT_PREPARING","Stock item is not being prepared");const checks=await repository.listPreparationChecks(context.tenantId,stockItemId),check=checks.find(item=>item.id===checkId);invariant(check,"PREPARATION_CHECK_NOT_FOUND","Preparation check was not found");const completed={...check,completedBy:context.actorId,completedAt:this.now().toISOString()};await repository.savePreparationCheck(completed);return completed;});}
-  async addMedia(context:RequestContext,id:EntityId,input:{kind:"image"|"video";storageKey:string;position:number;primary:boolean}){return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const value=await this.item(context.tenantId,id,repository);invariant(value.status==="preparing","STOCK_ITEM_NOT_PREPARING","Stock item is not being prepared");invariant(input.storageKey.trim().length>=3&&input.position>=0,"INVALID_VEHICLE_MEDIA","Vehicle media is invalid");const media:VehicleMediaProps={id:newEntityId(),tenantId:context.tenantId,organizationId:value.organizationId,siteId:value.siteId,stockItemId:id,...input,storageKey:input.storageKey.trim(),createdBy:context.actorId,createdAt:this.now().toISOString()};await repository.saveMedia(media);return media;});}
-  async markReady(context: RequestContext, id: EntityId, askingPriceCents: number) { invariant(askingPriceCents>0,"INVALID_ASKING_PRICE","Asking price must be positive");return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const value=await this.item(context.tenantId,id,repository);invariant(value.status==="preparing","STOCK_ITEM_NOT_PREPARING","Stock item is not being prepared");const checks=await repository.listPreparationChecks(context.tenantId,id),media=await repository.listMedia(context.tenantId,id);invariant(checks.length>0&&!checks.some(check=>check.required&&!check.completedAt),"PREPARATION_INCOMPLETE","Required preparation checks are incomplete");invariant(media.some(item=>item.primary&&item.kind==="image"),"PRIMARY_IMAGE_REQUIRED","A primary image is required");const next={...value,askingPriceCents,status:"ready" as const,updatedAt:this.now().toISOString()};await repository.markReady(next,context.actorId);return next;}); }
-
-  async publish(context: RequestContext, id: EntityId, channel: PublicationChannel) {
-    return this.repository.withStockItemLock(context.tenantId,id,async repository=>{
-      const value=await this.item(context.tenantId,id,repository);
-      invariant((value.status==="ready"||value.status==="published")&&Boolean(value.askingPriceCents),"STOCK_ITEM_NOT_PUBLISHABLE","Stock item is not ready for publication");
-      const publications=await repository.listPublications(context.tenantId,id);
-      invariant(!publications.some(item=>item.channel===channel&&item.status==="published"),"CHANNEL_ALREADY_PUBLISHED","Stock item is already published on this channel");
-      const publication: VehiclePublicationProps={id:newEntityId(),tenantId:context.tenantId,organizationId:value.organizationId,siteId:value.siteId,stockItemId:value.id,channel,askingPriceCents:value.askingPriceCents!,status:"published",publishedBy:context.actorId,publishedAt:this.now().toISOString()};
-      const next={...value,status:"published" as const,updatedAt:this.now().toISOString()}; await repository.publish(publication,next); return {publication,stockItem:next};
-    });
+  async acquire(
+    context: RequestContext,
+    input: {
+      organizationId: EntityId;
+      siteId: EntityId;
+      assetId: EntityId;
+      acquisitionMode: AcquisitionMode;
+      acquisitionCostCents: number;
+    },
+  ) {
+    invariant(
+      input.acquisitionCostCents >= 0,
+      "INVALID_ACQUISITION_COST",
+      "Acquisition cost must be positive or zero",
+    );
+    invariant(
+      await this.repository.siteBelongsToOrganization(
+        context.tenantId,
+        input.organizationId,
+        input.siteId,
+      ),
+      "SITE_SCOPE_MISMATCH",
+      "Site does not belong to this organization",
+    );
+    invariant(
+      await this.repository.assetExists(context.tenantId, input.assetId),
+      "ASSET_NOT_FOUND",
+      "Asset was not found",
+    );
+    const now = this.now().toISOString();
+    const value: VehicleStockItemProps = {
+      id: newEntityId(),
+      tenantId: context.tenantId,
+      ...input,
+      status: "acquired",
+      createdBy: context.actorId,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await this.repository.saveStockItem(value);
+    return value;
   }
 
-  async sell(context:RequestContext,id:EntityId,input:{buyerCustomerId:EntityId;salePriceCents:number}){invariant(input.salePriceCents>0,"INVALID_SALE_PRICE","Sale price must be positive");return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const item=await this.item(context.tenantId,id,repository);invariant(item.status==="published","STOCK_ITEM_NOT_SELLABLE","Only a published vehicle can be sold");invariant(await repository.customerExists(context.tenantId,input.buyerCustomerId),"BUYER_NOT_FOUND","Buyer was not found");const soldAt=this.now().toISOString();await repository.expireFlashSales(context.tenantId,id,soldAt);const sale:VehicleSaleProps={id:newEntityId(),tenantId:context.tenantId,organizationId:item.organizationId,siteId:item.siteId,stockItemId:item.id,buyerCustomerId:input.buyerCustomerId,salePriceCents:input.salePriceCents,acquisitionCostCents:item.acquisitionCostCents,grossMarginCents:input.salePriceCents-item.acquisitionCostCents,soldBy:context.actorId,soldAt},next={...item,status:"sold" as const,updatedAt:soldAt};await repository.sell(sale,next);return{sale,stockItem:next};});}
-  async scheduleDelivery(context:RequestContext,id:EntityId,plannedAt:string){const planned=new Date(plannedAt);invariant(!Number.isNaN(planned.getTime()),"INVALID_DELIVERY_DATE","Delivery date is invalid");return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const item=await this.item(context.tenantId,id,repository);invariant(item.status==="sold","STOCK_ITEM_NOT_SOLD","Only a sold vehicle can be scheduled for delivery");const sale=await repository.findSale(context.tenantId,id);invariant(sale,"SALE_NOT_FOUND","Vehicle sale was not found");invariant(!(await repository.findDelivery(context.tenantId,id)),"DELIVERY_ALREADY_SCHEDULED","Delivery is already scheduled");const now=this.now().toISOString(),delivery:VehicleDeliveryProps={id:newEntityId(),tenantId:context.tenantId,organizationId:item.organizationId,siteId:item.siteId,stockItemId:id,saleId:sale.id,status:"scheduled",plannedAt:planned.toISOString(),scheduledBy:context.actorId,createdAt:now};await repository.saveDelivery(delivery);return delivery;});}
-  async completeDelivery(context:RequestContext,id:EntityId,input:{handoverOdometerKm:number;notes?:string|undefined}){invariant(Number.isInteger(input.handoverOdometerKm)&&input.handoverOdometerKm>=0,"INVALID_HANDOVER_ODOMETER","Handover odometer is invalid");return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const item=await this.item(context.tenantId,id,repository);invariant(item.status==="sold","STOCK_ITEM_NOT_DELIVERABLE","Only a sold vehicle can be delivered");const current=await repository.findDelivery(context.tenantId,id);invariant(current&&current.status==="scheduled","DELIVERY_NOT_SCHEDULED","Delivery is not scheduled");const completedAt=this.now().toISOString(),delivery:VehicleDeliveryProps={...current,status:"completed",handoverOdometerKm:input.handoverOdometerKm,notes:input.notes?.trim()||undefined,completedBy:context.actorId,completedAt},next={...item,status:"delivered" as const,updatedAt:completedAt};await repository.completeDelivery(delivery,next);return{delivery,stockItem:next};});}
-  async transferOwnership(context:RequestContext,id:EntityId,documentIds:readonly EntityId[]){const uniqueDocuments=[...new Set(documentIds)];invariant(uniqueDocuments.length>0,"TRANSFER_DOCUMENT_REQUIRED","At least one transfer document is required");return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const item=await this.item(context.tenantId,id,repository);invariant(item.status==="delivered","STOCK_ITEM_NOT_DELIVERED","Only a delivered vehicle can transfer ownership");const sale=await repository.findSale(context.tenantId,id),delivery=await repository.findDelivery(context.tenantId,id);invariant(sale,"SALE_NOT_FOUND","Vehicle sale was not found");invariant(delivery?.status==="completed","DELIVERY_NOT_COMPLETED","Vehicle delivery is not completed");const previousOwnerCustomerId=await repository.assetOwnerCustomerId(context.tenantId,item.assetId);invariant(previousOwnerCustomerId,"ASSET_OWNER_NOT_FOUND","Asset owner was not found");invariant(previousOwnerCustomerId!==sale.buyerCustomerId,"OWNERSHIP_ALREADY_TRANSFERRED","Ownership is already transferred");invariant(await repository.documentsBelongToAsset(context.tenantId,item.assetId,uniqueDocuments),"INVALID_TRANSFER_DOCUMENT","Transfer documents do not belong to the vehicle");const transferredAt=this.now().toISOString(),evidenceHash=createHash("sha256").update([...uniqueDocuments].sort().join(":" )).digest("hex"),transfer:VehicleOwnershipTransferProps={id:newEntityId(),tenantId:context.tenantId,organizationId:item.organizationId,siteId:item.siteId,stockItemId:id,saleId:sale.id,deliveryId:delivery.id,assetId:item.assetId,previousOwnerCustomerId,newOwnerCustomerId:sale.buyerCustomerId,documentIds:Object.freeze(uniqueDocuments),evidenceHash,transferredBy:context.actorId,transferredAt};await repository.transferOwnership(transfer);return transfer;});}
-  async issueCessionDossier(context:RequestContext,id:EntityId,input:{certificateDocumentId:EntityId;deliveryReceiptDocumentId:EntityId}){invariant(input.certificateDocumentId!==input.deliveryReceiptDocumentId,"CESSION_DOCUMENTS_MUST_DIFFER","Cession documents must be distinct");return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const item=await this.item(context.tenantId,id,repository);invariant(item.status==="delivered","STOCK_ITEM_NOT_DELIVERED","Only a delivered vehicle can receive a cession dossier");invariant(!(await repository.findCessionDossier(context.tenantId,id)),"CESSION_DOSSIER_ALREADY_ISSUED","Cession dossier is already issued");const transfer=await repository.findOwnershipTransfer(context.tenantId,id);invariant(transfer,"OWNERSHIP_TRANSFER_REQUIRED","Ownership must be transferred first");invariant(await repository.documentsMatchKinds(context.tenantId,item.assetId,transfer.newOwnerCustomerId,{[input.certificateDocumentId]:"cession_certificate",[input.deliveryReceiptDocumentId]:"delivery_receipt"}),"INVALID_CESSION_DOCUMENTS","Cession documents are missing, misclassified, belong to another vehicle or are not owned by the buyer");const dossier:VehicleCessionDossierProps={id:newEntityId(),tenantId:context.tenantId,organizationId:item.organizationId,siteId:item.siteId,stockItemId:id,transferId:transfer.id,assetId:item.assetId,customerId:transfer.newOwnerCustomerId,...input,issuedBy:context.actorId,issuedAt:this.now().toISOString()};await repository.issueCessionDossier(dossier);return dossier;});}
+  async startPreparation(context: RequestContext, id: EntityId) {
+    return this.transition(
+      context,
+      id,
+      "acquired",
+      "preparing",
+      "STOCK_ITEM_NOT_ACQUIRED",
+    );
+  }
+  async addPreparationCheck(
+    context: RequestContext,
+    id: EntityId,
+    input: { label: string; required: boolean },
+  ) {
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        const value = await this.item(context.tenantId, id, repository);
+        invariant(
+          value.status === "preparing",
+          "STOCK_ITEM_NOT_PREPARING",
+          "Stock item is not being prepared",
+        );
+        invariant(
+          input.label.trim().length >= 2,
+          "INVALID_PREPARATION_CHECK",
+          "Preparation check is invalid",
+        );
+        const check: VehiclePreparationCheckProps = {
+          id: newEntityId(),
+          tenantId: context.tenantId,
+          organizationId: value.organizationId,
+          siteId: value.siteId,
+          stockItemId: id,
+          label: input.label.trim(),
+          required: input.required,
+          createdAt: this.now().toISOString(),
+        };
+        await repository.savePreparationCheck(check);
+        return check;
+      },
+    );
+  }
+  async completePreparationCheck(
+    context: RequestContext,
+    stockItemId: EntityId,
+    checkId: EntityId,
+  ) {
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      stockItemId,
+      async (repository) => {
+        const value = await this.item(
+          context.tenantId,
+          stockItemId,
+          repository,
+        );
+        invariant(
+          value.status === "preparing",
+          "STOCK_ITEM_NOT_PREPARING",
+          "Stock item is not being prepared",
+        );
+        const checks = await repository.listPreparationChecks(
+            context.tenantId,
+            stockItemId,
+          ),
+          check = checks.find((item) => item.id === checkId);
+        invariant(
+          check,
+          "PREPARATION_CHECK_NOT_FOUND",
+          "Preparation check was not found",
+        );
+        const completed = {
+          ...check,
+          completedBy: context.actorId,
+          completedAt: this.now().toISOString(),
+        };
+        await repository.savePreparationCheck(completed);
+        return completed;
+      },
+    );
+  }
+  async addMedia(
+    context: RequestContext,
+    id: EntityId,
+    input: {
+      kind: "image" | "video";
+      storageKey: string;
+      position: number;
+      primary: boolean;
+    },
+  ) {
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        const value = await this.item(context.tenantId, id, repository);
+        invariant(
+          value.status === "preparing",
+          "STOCK_ITEM_NOT_PREPARING",
+          "Stock item is not being prepared",
+        );
+        invariant(
+          input.storageKey.trim().length >= 3 && input.position >= 0,
+          "INVALID_VEHICLE_MEDIA",
+          "Vehicle media is invalid",
+        );
+        const media: VehicleMediaProps = {
+          id: newEntityId(),
+          tenantId: context.tenantId,
+          organizationId: value.organizationId,
+          siteId: value.siteId,
+          stockItemId: id,
+          ...input,
+          storageKey: input.storageKey.trim(),
+          createdBy: context.actorId,
+          createdAt: this.now().toISOString(),
+        };
+        await repository.saveMedia(media);
+        return media;
+      },
+    );
+  }
+  async markReady(
+    context: RequestContext,
+    id: EntityId,
+    askingPriceCents: number,
+  ) {
+    invariant(
+      askingPriceCents > 0,
+      "INVALID_ASKING_PRICE",
+      "Asking price must be positive",
+    );
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        const value = await this.item(context.tenantId, id, repository);
+        invariant(
+          value.status === "preparing",
+          "STOCK_ITEM_NOT_PREPARING",
+          "Stock item is not being prepared",
+        );
+        const checks = await repository.listPreparationChecks(
+            context.tenantId,
+            id,
+          ),
+          media = await repository.listMedia(context.tenantId, id);
+        invariant(
+          checks.length > 0 &&
+            !checks.some((check) => check.required && !check.completedAt),
+          "PREPARATION_INCOMPLETE",
+          "Required preparation checks are incomplete",
+        );
+        invariant(
+          media.some((item) => item.primary && item.kind === "image"),
+          "PRIMARY_IMAGE_REQUIRED",
+          "A primary image is required",
+        );
+        const next = {
+          ...value,
+          askingPriceCents,
+          status: "ready" as const,
+          updatedAt: this.now().toISOString(),
+        };
+        await repository.markReady(next, context.actorId);
+        return next;
+      },
+    );
+  }
 
-  async scheduleFlashSale(context:RequestContext,id:EntityId,input:{priceCents:number;startsAt:string;endsAt:string;channels:readonly PublicationChannel[]}){const startsAt=new Date(input.startsAt),endsAt=new Date(input.endsAt),now=this.now();invariant(Number.isInteger(input.priceCents)&&input.priceCents>0,"INVALID_FLASH_SALE_PRICE","Flash sale price must be positive");invariant(!Number.isNaN(startsAt.getTime())&&!Number.isNaN(endsAt.getTime())&&startsAt>=now&&endsAt>startsAt,"INVALID_FLASH_SALE_WINDOW","Flash sale window is invalid");const channels=[...new Set(input.channels)];invariant(channels.length>0,"FLASH_SALE_CHANNEL_REQUIRED","At least one flash sale channel is required");return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const item=await this.item(context.tenantId,id,repository),at=now.toISOString();invariant(item.status==="published"&&Boolean(item.askingPriceCents),"STOCK_ITEM_NOT_FLASH_SELLABLE","Only a published vehicle can enter a flash sale");await repository.expireFlashSales(context.tenantId,id,at);invariant(input.priceCents<item.askingPriceCents!,"FLASH_PRICE_NOT_DISCOUNTED","Flash sale price must be lower than asking price");const publications=await repository.listPublications(context.tenantId,id),publishedChannels=new Set(publications.filter(value=>value.status==="published").map(value=>value.channel));invariant(channels.every(channel=>publishedChannels.has(channel)),"FLASH_CHANNEL_NOT_PUBLISHED","Every flash sale channel must already be published");invariant(!(await repository.findOpenFlashSale(context.tenantId,id,at)),"FLASH_SALE_ALREADY_OPEN","An open flash sale already exists for this vehicle");const flashSale:VehicleFlashSaleProps={id:newEntityId(),tenantId:context.tenantId,organizationId:item.organizationId,siteId:item.siteId,stockItemId:id,priceCents:input.priceCents,startsAt:startsAt.toISOString(),endsAt:endsAt.toISOString(),channels:Object.freeze(channels),status:"scheduled",createdBy:context.actorId,createdAt:at};await repository.scheduleFlashSale(flashSale);return flashSale;});}
-  async cancelFlashSale(context:RequestContext,id:EntityId){return this.repository.withStockItemLock(context.tenantId,id,async repository=>{await this.item(context.tenantId,id,repository);const closedAt=this.now().toISOString();await repository.expireFlashSales(context.tenantId,id,closedAt);const current=await repository.findOpenFlashSale(context.tenantId,id,closedAt);if(!current){const latest=await repository.findLatestFlashSale(context.tenantId,id);invariant(latest?.status==="expired","FLASH_SALE_NOT_OPEN","No open flash sale exists for this vehicle");return latest;}const cancelled:VehicleFlashSaleProps={...current,status:"cancelled",closedReason:"cancelled",closedBy:context.actorId,closedAt};await repository.cancelFlashSale(cancelled);return cancelled;});}
-  async withdraw(context:RequestContext,id:EntityId){return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const item=await this.item(context.tenantId,id,repository);invariant(item.status==="ready"||item.status==="published","STOCK_ITEM_NOT_WITHDRAWABLE","Only a ready or published vehicle can be withdrawn");const withdrawnAt=this.now().toISOString();await repository.expireFlashSales(context.tenantId,id,withdrawnAt);const next={...item,status:"withdrawn" as const,updatedAt:withdrawnAt};await repository.withdrawStock(next,context.actorId);return next;});}
-  async scheduleAuction(context:RequestContext,id:EntityId,input:{channel:PublicationChannel;startingPriceCents:number;reservePriceCents:number;minimumIncrementCents:number;guaranteeAmountCents?:number|undefined;currency?:string|undefined;startsAt:string;endsAt:string}){const now=this.now(),startsAt=new Date(input.startsAt),endsAt=new Date(input.endsAt),guaranteeAmountCents=input.guaranteeAmountCents??Math.max(50000,Math.ceil(input.startingPriceCents*0.05)),currency=input.currency??"EUR";invariant(Number.isInteger(input.startingPriceCents)&&input.startingPriceCents>0&&Number.isInteger(input.reservePriceCents)&&input.reservePriceCents>=input.startingPriceCents&&Number.isInteger(input.minimumIncrementCents)&&input.minimumIncrementCents>0&&Number.isInteger(guaranteeAmountCents)&&guaranteeAmountCents>0&&/^[A-Z]{3}$/.test(currency),"INVALID_AUCTION_PRICING","Auction pricing or guarantee is invalid");invariant(!Number.isNaN(startsAt.getTime())&&!Number.isNaN(endsAt.getTime())&&startsAt>=now&&endsAt>startsAt,"INVALID_AUCTION_WINDOW","Auction window is invalid");return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const item=await this.item(context.tenantId,id,repository);invariant(item.status==="published","STOCK_ITEM_NOT_AUCTIONABLE","Only a published vehicle can enter an auction");const publications=await repository.listPublications(context.tenantId,id);invariant(publications.some(value=>value.channel===input.channel&&value.status==="published"),"AUCTION_CHANNEL_NOT_PUBLISHED","Auction channel is not published");invariant(!(await repository.findOpenAuction(context.tenantId,id)),"AUCTION_ALREADY_OPEN","An open auction already exists for this vehicle");const auction:VehicleAuctionProps={id:newEntityId(),tenantId:context.tenantId,organizationId:item.organizationId,siteId:item.siteId,stockItemId:id,channel:input.channel,startingPriceCents:input.startingPriceCents,reservePriceCents:input.reservePriceCents,minimumIncrementCents:input.minimumIncrementCents,guaranteeAmountCents,currency,startsAt:startsAt.toISOString(),endsAt:endsAt.toISOString(),status:"scheduled",createdBy:context.actorId,createdAt:now.toISOString()};await repository.scheduleAuction(auction);return auction;});}
-  async authorizeAuctionGuarantee(context:RequestContext,id:EntityId,auctionId:EntityId,input:{bidderCustomerId:EntityId;provider:string;providerReference:string;idempotencyKey:string;amountCents:number;currency:string}){invariant(input.provider.trim().length>0&&input.providerReference.trim().length>0&&input.idempotencyKey.trim().length>=3,"GUARANTEE_REFERENCE_REQUIRED","Guarantee provider references are required");return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const item=await this.item(context.tenantId,id,repository),auction=await repository.findOpenAuction(context.tenantId,id),authorizedAt=this.now().toISOString();invariant(item.status==="published"&&auction?.id===auctionId,"AUCTION_NOT_OPEN","Auction is not open");invariant(Date.parse(authorizedAt)<new Date(auction.endsAt).getTime(),"AUCTION_NOT_ACTIVE","Auction is outside its guarantee window");invariant(await repository.customerExists(context.tenantId,input.bidderCustomerId),"BIDDER_NOT_FOUND","Bidder was not found");invariant(input.amountCents===auction.guaranteeAmountCents&&input.currency===auction.currency,"GUARANTEE_AMOUNT_MISMATCH","Guarantee amount or currency does not match the auction");const guarantee:VehicleAuctionGuaranteeProps={id:newEntityId(),tenantId:context.tenantId,organizationId:item.organizationId,siteId:item.siteId,auctionId:auction.id,stockItemId:id,...input,provider:input.provider.trim(),providerReference:input.providerReference.trim(),idempotencyKey:input.idempotencyKey.trim(),status:"authorized",authorizedAt};return repository.authorizeAuctionGuarantee(guarantee);});}
-  async placeAuctionBid(context:RequestContext,id:EntityId,auctionId:EntityId,input:{bidderCustomerId:EntityId;amountCents:number}){invariant(Number.isInteger(input.amountCents)&&input.amountCents>0,"INVALID_BID_AMOUNT","Bid amount is invalid");return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const item=await this.item(context.tenantId,id,repository),auction=await repository.findOpenAuction(context.tenantId,id),placedAt=this.now().toISOString();invariant(item.status==="published"&&auction?.id===auctionId,"AUCTION_NOT_OPEN","Auction is not open");invariant(Date.parse(placedAt)>=new Date(auction.startsAt).getTime()&&Date.parse(placedAt)<new Date(auction.endsAt).getTime(),"AUCTION_NOT_ACTIVE","Auction is outside its bidding window");invariant(await repository.customerExists(context.tenantId,input.bidderCustomerId),"BIDDER_NOT_FOUND","Bidder was not found");const guarantee=await repository.findAuctionGuarantee(context.tenantId,auction.id,input.bidderCustomerId);invariant(guarantee?.status==="authorized"&&guarantee.amountCents===auction.guaranteeAmountCents&&guarantee.currency===auction.currency,"AUCTION_GUARANTEE_REQUIRED","An active matching guarantee is required before bidding");const bids=await repository.listAuctionBids(context.tenantId,auction.id),highest=bids.reduce((amount,bid)=>Math.max(amount,bid.amountCents),0),minimum=highest===0?auction.startingPriceCents:highest+auction.minimumIncrementCents;invariant(input.amountCents>=minimum,"BID_TOO_LOW","Bid does not meet the required minimum");const bid:VehicleAuctionBidProps={id:newEntityId(),tenantId:context.tenantId,organizationId:item.organizationId,siteId:item.siteId,auctionId:auction.id,stockItemId:id,bidderCustomerId:input.bidderCustomerId,guaranteeId:guarantee.id,amountCents:input.amountCents,placedAt};await repository.placeAuctionBid(bid);return bid;});}
-  async closeAuction(context:RequestContext,id:EntityId,auctionId:EntityId){return this.repository.withStockItemLock(context.tenantId,id,async repository=>{const item=await this.item(context.tenantId,id,repository),auction=await repository.findOpenAuction(context.tenantId,id),closedAt=this.now().toISOString();invariant(item.status==="published"&&auction?.id===auctionId,"AUCTION_NOT_OPEN","Auction is not open");invariant(Date.parse(closedAt)>=new Date(auction.endsAt).getTime(),"AUCTION_STILL_ACTIVE","Auction bidding window is still active");const bids=await repository.listAuctionBids(context.tenantId,auction.id),winner=[...bids].sort((a,b)=>b.amountCents-a.amountCents||new Date(a.placedAt).getTime()-new Date(b.placedAt).getTime())[0];if(!winner||winner.amountCents<auction.reservePriceCents){const closed:VehicleAuctionProps={...auction,status:"unsold",closedReason:"reserve_not_met",closedBy:context.actorId,closedAt};await repository.closeAuction(closed);return{auction:closed,sale:null};}const sale:VehicleSaleProps={id:newEntityId(),tenantId:context.tenantId,organizationId:item.organizationId,siteId:item.siteId,stockItemId:id,buyerCustomerId:winner.bidderCustomerId,salePriceCents:winner.amountCents,acquisitionCostCents:item.acquisitionCostCents,grossMarginCents:winner.amountCents-item.acquisitionCostCents,soldBy:context.actorId,soldAt:closedAt},next={...item,status:"sold" as const,updatedAt:closedAt},closed:VehicleAuctionProps={...auction,status:"sold",winnerCustomerId:winner.bidderCustomerId,winningBidId:winner.id,closedReason:"reserve_met",closedBy:context.actorId,closedAt};invariant(closed.winnerCustomerId===winner.bidderCustomerId&&sale.buyerCustomerId===winner.bidderCustomerId&&sale.salePriceCents===winner.amountCents,"AUCTION_AWARD_MISMATCH","Auction award and sale do not match the winning bid");await repository.closeAuction(closed,sale,next);return{auction:closed,sale};});}
+  async publish(
+    context: RequestContext,
+    id: EntityId,
+    channel: PublicationChannel,
+  ) {
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        const value = await this.item(context.tenantId, id, repository);
+        invariant(
+          (value.status === "ready" || value.status === "published") &&
+            Boolean(value.askingPriceCents),
+          "STOCK_ITEM_NOT_PUBLISHABLE",
+          "Stock item is not ready for publication",
+        );
+        const publications = await repository.listPublications(
+          context.tenantId,
+          id,
+        );
+        invariant(
+          !publications.some(
+            (item) => item.channel === channel && item.status === "published",
+          ),
+          "CHANNEL_ALREADY_PUBLISHED",
+          "Stock item is already published on this channel",
+        );
+        const publication: VehiclePublicationProps = {
+          id: newEntityId(),
+          tenantId: context.tenantId,
+          organizationId: value.organizationId,
+          siteId: value.siteId,
+          stockItemId: value.id,
+          channel,
+          askingPriceCents: value.askingPriceCents!,
+          status: "published",
+          publishedBy: context.actorId,
+          publishedAt: this.now().toISOString(),
+        };
+        const next = {
+          ...value,
+          status: "published" as const,
+          updatedAt: this.now().toISOString(),
+        };
+        await repository.publish(publication, next);
+        return { publication, stockItem: next };
+      },
+    );
+  }
 
-  async scope(context: RequestContext,id:EntityId){const value=await this.item(context.tenantId,id);return{organizationId:value.organizationId,siteId:value.siteId};}
-  private async transition(context:RequestContext,id:EntityId,from:VehicleStockStatus,to:VehicleStockStatus,code:string){const value=await this.item(context.tenantId,id);invariant(value.status===from,code,"Vehicle stock transition is not allowed");const next={...value,status:to,updatedAt:this.now().toISOString()};await this.repository.saveStockItem(next);return next;}
-  private async item(tenantId:TenantId,id:EntityId,repository=this.repository){const value=await repository.findStockItem(tenantId,id);invariant(value,"STOCK_ITEM_NOT_FOUND","Vehicle stock item was not found");return value;}
+  async sell(
+    context: RequestContext,
+    id: EntityId,
+    input: { buyerCustomerId: EntityId; salePriceCents: number },
+  ) {
+    invariant(
+      input.salePriceCents > 0,
+      "INVALID_SALE_PRICE",
+      "Sale price must be positive",
+    );
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        const item = await this.item(context.tenantId, id, repository);
+        invariant(
+          item.status === "published",
+          "STOCK_ITEM_NOT_SELLABLE",
+          "Only a published vehicle can be sold",
+        );
+        invariant(
+          await repository.customerExists(
+            context.tenantId,
+            input.buyerCustomerId,
+          ),
+          "BUYER_NOT_FOUND",
+          "Buyer was not found",
+        );
+        const soldAt = this.now().toISOString();
+        await repository.expireFlashSales(context.tenantId, id, soldAt);
+        const sale: VehicleSaleProps = {
+            id: newEntityId(),
+            tenantId: context.tenantId,
+            organizationId: item.organizationId,
+            siteId: item.siteId,
+            stockItemId: item.id,
+            buyerCustomerId: input.buyerCustomerId,
+            salePriceCents: input.salePriceCents,
+            acquisitionCostCents: item.acquisitionCostCents,
+            grossMarginCents: input.salePriceCents - item.acquisitionCostCents,
+            soldBy: context.actorId,
+            soldAt,
+          },
+          next = { ...item, status: "sold" as const, updatedAt: soldAt };
+        await repository.sell(sale, next);
+        return { sale, stockItem: next };
+      },
+    );
+  }
+  async scheduleDelivery(
+    context: RequestContext,
+    id: EntityId,
+    plannedAt: string,
+  ) {
+    const planned = new Date(plannedAt);
+    invariant(
+      !Number.isNaN(planned.getTime()),
+      "INVALID_DELIVERY_DATE",
+      "Delivery date is invalid",
+    );
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        const item = await this.item(context.tenantId, id, repository);
+        invariant(
+          item.status === "sold",
+          "STOCK_ITEM_NOT_SOLD",
+          "Only a sold vehicle can be scheduled for delivery",
+        );
+        const sale = await repository.findSale(context.tenantId, id);
+        invariant(sale, "SALE_NOT_FOUND", "Vehicle sale was not found");
+        invariant(
+          !(await repository.findDelivery(context.tenantId, id)),
+          "DELIVERY_ALREADY_SCHEDULED",
+          "Delivery is already scheduled",
+        );
+        const now = this.now().toISOString(),
+          delivery: VehicleDeliveryProps = {
+            id: newEntityId(),
+            tenantId: context.tenantId,
+            organizationId: item.organizationId,
+            siteId: item.siteId,
+            stockItemId: id,
+            saleId: sale.id,
+            status: "scheduled",
+            plannedAt: planned.toISOString(),
+            scheduledBy: context.actorId,
+            createdAt: now,
+          };
+        await repository.saveDelivery(delivery);
+        return delivery;
+      },
+    );
+  }
+  async completeDelivery(
+    context: RequestContext,
+    id: EntityId,
+    input: { handoverOdometerKm: number; notes?: string | undefined },
+  ) {
+    invariant(
+      Number.isInteger(input.handoverOdometerKm) &&
+        input.handoverOdometerKm >= 0,
+      "INVALID_HANDOVER_ODOMETER",
+      "Handover odometer is invalid",
+    );
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        const item = await this.item(context.tenantId, id, repository);
+        invariant(
+          item.status === "sold",
+          "STOCK_ITEM_NOT_DELIVERABLE",
+          "Only a sold vehicle can be delivered",
+        );
+        const current = await repository.findDelivery(context.tenantId, id);
+        invariant(
+          current && current.status === "scheduled",
+          "DELIVERY_NOT_SCHEDULED",
+          "Delivery is not scheduled",
+        );
+        const completedAt = this.now().toISOString(),
+          delivery: VehicleDeliveryProps = {
+            ...current,
+            status: "completed",
+            handoverOdometerKm: input.handoverOdometerKm,
+            notes: input.notes?.trim() || undefined,
+            completedBy: context.actorId,
+            completedAt,
+          },
+          next = {
+            ...item,
+            status: "delivered" as const,
+            updatedAt: completedAt,
+          };
+        await repository.completeDelivery(delivery, next);
+        return { delivery, stockItem: next };
+      },
+    );
+  }
+  async transferOwnership(
+    context: RequestContext,
+    id: EntityId,
+    documentIds: readonly EntityId[],
+  ) {
+    const uniqueDocuments = [...new Set(documentIds)];
+    invariant(
+      uniqueDocuments.length > 0,
+      "TRANSFER_DOCUMENT_REQUIRED",
+      "At least one transfer document is required",
+    );
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        const item = await this.item(context.tenantId, id, repository);
+        invariant(
+          item.status === "delivered",
+          "STOCK_ITEM_NOT_DELIVERED",
+          "Only a delivered vehicle can transfer ownership",
+        );
+        const sale = await repository.findSale(context.tenantId, id),
+          delivery = await repository.findDelivery(context.tenantId, id);
+        invariant(sale, "SALE_NOT_FOUND", "Vehicle sale was not found");
+        invariant(
+          delivery?.status === "completed",
+          "DELIVERY_NOT_COMPLETED",
+          "Vehicle delivery is not completed",
+        );
+        const previousOwnerCustomerId = await repository.assetOwnerCustomerId(
+          context.tenantId,
+          item.assetId,
+        );
+        invariant(
+          previousOwnerCustomerId,
+          "ASSET_OWNER_NOT_FOUND",
+          "Asset owner was not found",
+        );
+        invariant(
+          previousOwnerCustomerId !== sale.buyerCustomerId,
+          "OWNERSHIP_ALREADY_TRANSFERRED",
+          "Ownership is already transferred",
+        );
+        invariant(
+          await repository.documentsBelongToAsset(
+            context.tenantId,
+            item.assetId,
+            uniqueDocuments,
+          ),
+          "INVALID_TRANSFER_DOCUMENT",
+          "Transfer documents do not belong to the vehicle",
+        );
+        const transferredAt = this.now().toISOString(),
+          evidenceHash = createHash("sha256")
+            .update([...uniqueDocuments].sort().join(":"))
+            .digest("hex"),
+          transfer: VehicleOwnershipTransferProps = {
+            id: newEntityId(),
+            tenantId: context.tenantId,
+            organizationId: item.organizationId,
+            siteId: item.siteId,
+            stockItemId: id,
+            saleId: sale.id,
+            deliveryId: delivery.id,
+            assetId: item.assetId,
+            previousOwnerCustomerId,
+            newOwnerCustomerId: sale.buyerCustomerId,
+            documentIds: Object.freeze(uniqueDocuments),
+            evidenceHash,
+            transferredBy: context.actorId,
+            transferredAt,
+          };
+        await repository.transferOwnership(transfer);
+        return transfer;
+      },
+    );
+  }
+  async issueCessionDossier(
+    context: RequestContext,
+    id: EntityId,
+    input: {
+      certificateDocumentId: EntityId;
+      deliveryReceiptDocumentId: EntityId;
+    },
+  ) {
+    invariant(
+      input.certificateDocumentId !== input.deliveryReceiptDocumentId,
+      "CESSION_DOCUMENTS_MUST_DIFFER",
+      "Cession documents must be distinct",
+    );
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        const item = await this.item(context.tenantId, id, repository);
+        invariant(
+          item.status === "delivered",
+          "STOCK_ITEM_NOT_DELIVERED",
+          "Only a delivered vehicle can receive a cession dossier",
+        );
+        invariant(
+          !(await repository.findCessionDossier(context.tenantId, id)),
+          "CESSION_DOSSIER_ALREADY_ISSUED",
+          "Cession dossier is already issued",
+        );
+        const transfer = await repository.findOwnershipTransfer(
+          context.tenantId,
+          id,
+        );
+        invariant(
+          transfer,
+          "OWNERSHIP_TRANSFER_REQUIRED",
+          "Ownership must be transferred first",
+        );
+        invariant(
+          await repository.documentsMatchKinds(
+            context.tenantId,
+            item.assetId,
+            transfer.newOwnerCustomerId,
+            {
+              [input.certificateDocumentId]: "cession_certificate",
+              [input.deliveryReceiptDocumentId]: "delivery_receipt",
+            },
+          ),
+          "INVALID_CESSION_DOCUMENTS",
+          "Cession documents are missing, misclassified, belong to another vehicle or are not owned by the buyer",
+        );
+        const dossier: VehicleCessionDossierProps = {
+          id: newEntityId(),
+          tenantId: context.tenantId,
+          organizationId: item.organizationId,
+          siteId: item.siteId,
+          stockItemId: id,
+          transferId: transfer.id,
+          assetId: item.assetId,
+          customerId: transfer.newOwnerCustomerId,
+          ...input,
+          issuedBy: context.actorId,
+          issuedAt: this.now().toISOString(),
+        };
+        await repository.issueCessionDossier(dossier);
+        return dossier;
+      },
+    );
+  }
+
+  async scheduleFlashSale(
+    context: RequestContext,
+    id: EntityId,
+    input: {
+      priceCents: number;
+      startsAt: string;
+      endsAt: string;
+      channels: readonly PublicationChannel[];
+    },
+  ) {
+    const startsAt = new Date(input.startsAt),
+      endsAt = new Date(input.endsAt),
+      now = this.now();
+    invariant(
+      Number.isInteger(input.priceCents) && input.priceCents > 0,
+      "INVALID_FLASH_SALE_PRICE",
+      "Flash sale price must be positive",
+    );
+    invariant(
+      !Number.isNaN(startsAt.getTime()) &&
+        !Number.isNaN(endsAt.getTime()) &&
+        startsAt >= now &&
+        endsAt > startsAt,
+      "INVALID_FLASH_SALE_WINDOW",
+      "Flash sale window is invalid",
+    );
+    const channels = [...new Set(input.channels)];
+    invariant(
+      channels.length > 0,
+      "FLASH_SALE_CHANNEL_REQUIRED",
+      "At least one flash sale channel is required",
+    );
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        const item = await this.item(context.tenantId, id, repository),
+          at = now.toISOString();
+        invariant(
+          item.status === "published" && Boolean(item.askingPriceCents),
+          "STOCK_ITEM_NOT_FLASH_SELLABLE",
+          "Only a published vehicle can enter a flash sale",
+        );
+        await repository.expireFlashSales(context.tenantId, id, at);
+        invariant(
+          input.priceCents < item.askingPriceCents!,
+          "FLASH_PRICE_NOT_DISCOUNTED",
+          "Flash sale price must be lower than asking price",
+        );
+        const publications = await repository.listPublications(
+            context.tenantId,
+            id,
+          ),
+          publishedChannels = new Set(
+            publications
+              .filter((value) => value.status === "published")
+              .map((value) => value.channel),
+          );
+        invariant(
+          channels.every((channel) => publishedChannels.has(channel)),
+          "FLASH_CHANNEL_NOT_PUBLISHED",
+          "Every flash sale channel must already be published",
+        );
+        invariant(
+          !(await repository.findOpenFlashSale(context.tenantId, id, at)),
+          "FLASH_SALE_ALREADY_OPEN",
+          "An open flash sale already exists for this vehicle",
+        );
+        const flashSale: VehicleFlashSaleProps = {
+          id: newEntityId(),
+          tenantId: context.tenantId,
+          organizationId: item.organizationId,
+          siteId: item.siteId,
+          stockItemId: id,
+          priceCents: input.priceCents,
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          channels: Object.freeze(channels),
+          status: "scheduled",
+          createdBy: context.actorId,
+          createdAt: at,
+        };
+        await repository.scheduleFlashSale(flashSale);
+        return flashSale;
+      },
+    );
+  }
+  async cancelFlashSale(context: RequestContext, id: EntityId) {
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        await this.item(context.tenantId, id, repository);
+        const closedAt = this.now().toISOString();
+        await repository.expireFlashSales(context.tenantId, id, closedAt);
+        const current = await repository.findOpenFlashSale(
+          context.tenantId,
+          id,
+          closedAt,
+        );
+        if (!current) {
+          const latest = await repository.findLatestFlashSale(
+            context.tenantId,
+            id,
+          );
+          invariant(
+            latest?.status === "expired",
+            "FLASH_SALE_NOT_OPEN",
+            "No open flash sale exists for this vehicle",
+          );
+          return latest;
+        }
+        const cancelled: VehicleFlashSaleProps = {
+          ...current,
+          status: "cancelled",
+          closedReason: "cancelled",
+          closedBy: context.actorId,
+          closedAt,
+        };
+        await repository.cancelFlashSale(cancelled);
+        return cancelled;
+      },
+    );
+  }
+  async withdraw(context: RequestContext, id: EntityId) {
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        const item = await this.item(context.tenantId, id, repository);
+        invariant(
+          item.status === "ready" || item.status === "published",
+          "STOCK_ITEM_NOT_WITHDRAWABLE",
+          "Only a ready or published vehicle can be withdrawn",
+        );
+        const withdrawnAt = this.now().toISOString();
+        await repository.expireFlashSales(context.tenantId, id, withdrawnAt);
+        const next = {
+          ...item,
+          status: "withdrawn" as const,
+          updatedAt: withdrawnAt,
+        };
+        await repository.withdrawStock(next, context.actorId);
+        return next;
+      },
+    );
+  }
+  async scheduleAuction(
+    context: RequestContext,
+    id: EntityId,
+    input: {
+      channel: PublicationChannel;
+      startingPriceCents: number;
+      reservePriceCents: number;
+      minimumIncrementCents: number;
+      guaranteeAmountCents?: number | undefined;
+      currency?: string | undefined;
+      startsAt: string;
+      endsAt: string;
+    },
+  ) {
+    const now = this.now(),
+      startsAt = new Date(input.startsAt),
+      endsAt = new Date(input.endsAt),
+      guaranteeAmountCents =
+        input.guaranteeAmountCents ??
+        Math.max(50000, Math.ceil(input.startingPriceCents * 0.05)),
+      currency = input.currency ?? "EUR";
+    invariant(
+      Number.isInteger(input.startingPriceCents) &&
+        input.startingPriceCents > 0 &&
+        Number.isInteger(input.reservePriceCents) &&
+        input.reservePriceCents >= input.startingPriceCents &&
+        Number.isInteger(input.minimumIncrementCents) &&
+        input.minimumIncrementCents > 0 &&
+        Number.isInteger(guaranteeAmountCents) &&
+        guaranteeAmountCents > 0 &&
+        /^[A-Z]{3}$/.test(currency),
+      "INVALID_AUCTION_PRICING",
+      "Auction pricing or guarantee is invalid",
+    );
+    invariant(
+      !Number.isNaN(startsAt.getTime()) &&
+        !Number.isNaN(endsAt.getTime()) &&
+        startsAt >= now &&
+        endsAt > startsAt,
+      "INVALID_AUCTION_WINDOW",
+      "Auction window is invalid",
+    );
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        const item = await this.item(context.tenantId, id, repository);
+        invariant(
+          item.status === "published",
+          "STOCK_ITEM_NOT_AUCTIONABLE",
+          "Only a published vehicle can enter an auction",
+        );
+        const publications = await repository.listPublications(
+          context.tenantId,
+          id,
+        );
+        invariant(
+          publications.some(
+            (value) =>
+              value.channel === input.channel && value.status === "published",
+          ),
+          "AUCTION_CHANNEL_NOT_PUBLISHED",
+          "Auction channel is not published",
+        );
+        invariant(
+          !(await repository.findOpenAuction(context.tenantId, id)),
+          "AUCTION_ALREADY_OPEN",
+          "An open auction already exists for this vehicle",
+        );
+        const auction: VehicleAuctionProps = {
+          id: newEntityId(),
+          tenantId: context.tenantId,
+          organizationId: item.organizationId,
+          siteId: item.siteId,
+          stockItemId: id,
+          channel: input.channel,
+          startingPriceCents: input.startingPriceCents,
+          reservePriceCents: input.reservePriceCents,
+          minimumIncrementCents: input.minimumIncrementCents,
+          guaranteeAmountCents,
+          currency,
+          guaranteeRequired: true,
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          status: "scheduled",
+          createdBy: context.actorId,
+          createdAt: now.toISOString(),
+        };
+        await repository.scheduleAuction(auction);
+        return auction;
+      },
+    );
+  }
+  async authorizeAuctionGuarantee(
+    context: RequestContext,
+    id: EntityId,
+    auctionId: EntityId,
+    input: {
+      bidderCustomerId: EntityId;
+      provider: string;
+      providerReference: string;
+      idempotencyKey: string;
+      amountCents: number;
+      currency: string;
+    },
+  ) {
+    invariant(
+      input.provider.trim().length > 0 &&
+        input.providerReference.trim().length > 0 &&
+        input.idempotencyKey.trim().length >= 3,
+      "GUARANTEE_REFERENCE_REQUIRED",
+      "Guarantee provider references are required",
+    );
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        const item = await this.item(context.tenantId, id, repository),
+          auction = await repository.findOpenAuction(context.tenantId, id),
+          authorizedAt = this.now().toISOString();
+        invariant(
+          item.status === "published" && auction?.id === auctionId,
+          "AUCTION_NOT_OPEN",
+          "Auction is not open",
+        );
+        invariant(
+          auction.guaranteeRequired,
+          "AUCTION_LEGACY_GUARANTEE_UNAVAILABLE",
+          "Historical auctions cannot accept new guarantees or bids",
+        );
+        invariant(
+          Date.parse(authorizedAt) < new Date(auction.endsAt).getTime(),
+          "AUCTION_NOT_ACTIVE",
+          "Auction is outside its guarantee window",
+        );
+        invariant(
+          await repository.customerExists(
+            context.tenantId,
+            input.bidderCustomerId,
+          ),
+          "BIDDER_NOT_FOUND",
+          "Bidder was not found",
+        );
+        invariant(
+          input.amountCents === auction.guaranteeAmountCents &&
+            input.currency === auction.currency,
+          "GUARANTEE_AMOUNT_MISMATCH",
+          "Guarantee amount or currency does not match the auction",
+        );
+        const guarantee: VehicleAuctionGuaranteeProps = {
+          id: newEntityId(),
+          tenantId: context.tenantId,
+          organizationId: item.organizationId,
+          siteId: item.siteId,
+          auctionId: auction.id,
+          stockItemId: id,
+          ...input,
+          provider: input.provider.trim(),
+          providerReference: input.providerReference.trim(),
+          idempotencyKey: input.idempotencyKey.trim(),
+          status: "authorized",
+          authorizedAt,
+        };
+        return repository.authorizeAuctionGuarantee(guarantee);
+      },
+    );
+  }
+  async placeAuctionBid(
+    context: RequestContext,
+    id: EntityId,
+    auctionId: EntityId,
+    input: { bidderCustomerId: EntityId; amountCents: number },
+  ) {
+    invariant(
+      Number.isInteger(input.amountCents) && input.amountCents > 0,
+      "INVALID_BID_AMOUNT",
+      "Bid amount is invalid",
+    );
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        const item = await this.item(context.tenantId, id, repository),
+          auction = await repository.findOpenAuction(context.tenantId, id),
+          placedAt = this.now().toISOString();
+        invariant(
+          item.status === "published" && auction?.id === auctionId,
+          "AUCTION_NOT_OPEN",
+          "Auction is not open",
+        );
+        invariant(
+          auction.guaranteeRequired,
+          "AUCTION_LEGACY_GUARANTEE_UNAVAILABLE",
+          "Historical auctions cannot accept new guarantees or bids",
+        );
+        invariant(
+          Date.parse(placedAt) >= new Date(auction.startsAt).getTime() &&
+            Date.parse(placedAt) < new Date(auction.endsAt).getTime(),
+          "AUCTION_NOT_ACTIVE",
+          "Auction is outside its bidding window",
+        );
+        invariant(
+          await repository.customerExists(
+            context.tenantId,
+            input.bidderCustomerId,
+          ),
+          "BIDDER_NOT_FOUND",
+          "Bidder was not found",
+        );
+        const guarantee = await repository.findAuctionGuarantee(
+          context.tenantId,
+          auction.id,
+          input.bidderCustomerId,
+        );
+        invariant(
+          guarantee?.status === "authorized" &&
+            guarantee.amountCents === auction.guaranteeAmountCents &&
+            guarantee.currency === auction.currency,
+          "AUCTION_GUARANTEE_REQUIRED",
+          "An active matching guarantee is required before bidding",
+        );
+        const bids = await repository.listAuctionBids(
+            context.tenantId,
+            auction.id,
+          ),
+          highest = bids.reduce(
+            (amount, bid) => Math.max(amount, bid.amountCents),
+            0,
+          ),
+          minimum =
+            highest === 0
+              ? auction.startingPriceCents
+              : highest + auction.minimumIncrementCents;
+        invariant(
+          input.amountCents >= minimum,
+          "BID_TOO_LOW",
+          "Bid does not meet the required minimum",
+        );
+        const bid: VehicleAuctionBidProps = {
+          id: newEntityId(),
+          tenantId: context.tenantId,
+          organizationId: item.organizationId,
+          siteId: item.siteId,
+          auctionId: auction.id,
+          stockItemId: id,
+          bidderCustomerId: input.bidderCustomerId,
+          guaranteeId: guarantee.id,
+          amountCents: input.amountCents,
+          placedAt,
+        };
+        await repository.placeAuctionBid(bid);
+        return bid;
+      },
+    );
+  }
+  async closeAuction(
+    context: RequestContext,
+    id: EntityId,
+    auctionId: EntityId,
+  ) {
+    return this.repository.withStockItemLock(
+      context.tenantId,
+      id,
+      async (repository) => {
+        const item = await this.item(context.tenantId, id, repository),
+          auction = await repository.findOpenAuction(context.tenantId, id),
+          closedAt = this.now().toISOString();
+        invariant(
+          item.status === "published" && auction?.id === auctionId,
+          "AUCTION_NOT_OPEN",
+          "Auction is not open",
+        );
+        invariant(
+          Date.parse(closedAt) >= new Date(auction.endsAt).getTime(),
+          "AUCTION_STILL_ACTIVE",
+          "Auction bidding window is still active",
+        );
+        const bids = await repository.listAuctionBids(
+            context.tenantId,
+            auction.id,
+          ),
+          winner = [...bids].sort(
+            (a, b) =>
+              b.amountCents - a.amountCents ||
+              new Date(a.placedAt).getTime() - new Date(b.placedAt).getTime(),
+          )[0];
+        if (!winner || winner.amountCents < auction.reservePriceCents) {
+          const closed: VehicleAuctionProps = {
+            ...auction,
+            status: "unsold",
+            closedReason: "reserve_not_met",
+            closedBy: context.actorId,
+            closedAt,
+          };
+          await repository.closeAuction(closed);
+          return { auction: closed, sale: null };
+        }
+        const sale: VehicleSaleProps = {
+            id: newEntityId(),
+            tenantId: context.tenantId,
+            organizationId: item.organizationId,
+            siteId: item.siteId,
+            stockItemId: id,
+            buyerCustomerId: winner.bidderCustomerId,
+            salePriceCents: winner.amountCents,
+            acquisitionCostCents: item.acquisitionCostCents,
+            grossMarginCents: winner.amountCents - item.acquisitionCostCents,
+            soldBy: context.actorId,
+            soldAt: closedAt,
+          },
+          next = { ...item, status: "sold" as const, updatedAt: closedAt },
+          closed: VehicleAuctionProps = {
+            ...auction,
+            status: "sold",
+            winnerCustomerId: winner.bidderCustomerId,
+            winningBidId: winner.id,
+            closedReason: "reserve_met",
+            closedBy: context.actorId,
+            closedAt,
+          };
+        invariant(
+          closed.winnerCustomerId === winner.bidderCustomerId &&
+            sale.buyerCustomerId === winner.bidderCustomerId &&
+            sale.salePriceCents === winner.amountCents,
+          "AUCTION_AWARD_MISMATCH",
+          "Auction award and sale do not match the winning bid",
+        );
+        await repository.closeAuction(closed, sale, next);
+        return { auction: closed, sale };
+      },
+    );
+  }
+
+  async scope(context: RequestContext, id: EntityId) {
+    const value = await this.item(context.tenantId, id);
+    return { organizationId: value.organizationId, siteId: value.siteId };
+  }
+  private async transition(
+    context: RequestContext,
+    id: EntityId,
+    from: VehicleStockStatus,
+    to: VehicleStockStatus,
+    code: string,
+  ) {
+    const value = await this.item(context.tenantId, id);
+    invariant(
+      value.status === from,
+      code,
+      "Vehicle stock transition is not allowed",
+    );
+    const next = { ...value, status: to, updatedAt: this.now().toISOString() };
+    await this.repository.saveStockItem(next);
+    return next;
+  }
+  private async item(
+    tenantId: TenantId,
+    id: EntityId,
+    repository = this.repository,
+  ) {
+    const value = await repository.findStockItem(tenantId, id);
+    invariant(
+      value,
+      "STOCK_ITEM_NOT_FOUND",
+      "Vehicle stock item was not found",
+    );
+    return value;
+  }
 }
