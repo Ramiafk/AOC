@@ -139,15 +139,20 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_flash_sales WHERE tenant_id=$1 AND stock_item_id=$2 AND status='expired' AND closed_reason='expired'",[t1,stockItem.id])).rows[0].count,1);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_flash_sales WHERE tenant_id=$1 AND stock_item_id=$2",[t1,stockItem.id])).rows[0].count,3);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM outbox_events WHERE tenant_id=$1 AND event_type='commerce.vehicle_flash_sale_expired.v1' AND payload->>'stockItemId'=$2",[t1,stockItem.id])).rows[0].count,1);
-    const saleResults=await Promise.allSettled([
-      commerce.sell(context,stockItem.id,{buyerCustomerId,salePriceCents:1500000}),
-      commerce.sell(context,stockItem.id,{buyerCustomerId,salePriceCents:1500000})
-    ]);
-    assert.equal(saleResults.filter(result=>result.status==="fulfilled").length,1);
+    const auction=await laterCommerce.scheduleAuction(context,stockItem.id,{channel:"central_marketplace",startingPriceCents:1400000,reservePriceCents:1500000,minimumIncrementCents:10000,startsAt:"2026-07-22T13:00:00Z",endsAt:"2026-07-22T14:00:00Z"});
+    const biddingCommerce=new ManageVehicleCommerce(commerceRepository,()=>new Date("2026-07-22T13:30:00Z"));
+    await biddingCommerce.placeAuctionBid(context,stockItem.id,auction.id,{bidderCustomerId:customerId,amountCents:1450000});
+    const winningBid=await biddingCommerce.placeAuctionBid(context,stockItem.id,auction.id,{bidderCustomerId:buyerCustomerId,amountCents:1500000});
+    const closingCommerce=new ManageVehicleCommerce(commerceRepository,()=>new Date("2026-07-22T14:01:00Z"));
+    const closeResults=await Promise.allSettled([closingCommerce.closeAuction(context,stockItem.id,auction.id),closingCommerce.closeAuction(context,stockItem.id,auction.id)]);
+    assert.equal(closeResults.filter(result=>result.status==="fulfilled").length,1);
+    assert.equal((await adminPool.query("SELECT winning_bid_id FROM vehicle_auctions WHERE tenant_id=$1 AND id=$2 AND status='sold'",[t1,auction.id])).rows[0].winning_bid_id,winningBid.id);
+    await assert.rejects(()=>adminPool.query("UPDATE vehicle_auctions SET winner_customer_id=$3 WHERE tenant_id=$1 AND id=$2",[t1,auction.id,customerId]),/vehicle_auction_winner_identity_fk/);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_sales WHERE tenant_id=$1 AND stock_item_id=$2",[t1,stockItem.id])).rows[0].count,1);
     assert.equal((await adminPool.query("SELECT gross_margin_cents FROM vehicle_sales WHERE tenant_id=$1 AND stock_item_id=$2",[t1,stockItem.id])).rows[0].gross_margin_cents,300000);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_publications WHERE tenant_id=$1 AND stock_item_id=$2 AND status='published'",[t1,stockItem.id])).rows[0].count,0);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM outbox_events WHERE tenant_id=$1 AND event_type='commerce.vehicle_sold.v1' AND payload->>'stockItemId'=$2",[t1,stockItem.id])).rows[0].count,1);
+    assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM outbox_events WHERE tenant_id=$1 AND event_type='commerce.vehicle_auction_awarded.v1' AND aggregate_id=$2",[t1,auction.id])).rows[0].count,1);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_flash_sales WHERE tenant_id=$1 AND stock_item_id=$2 AND status='closed' AND closed_reason='sold'",[t1,stockItem.id])).rows[0].count,1);
     const deliveryResults=await Promise.allSettled([
       commerce.scheduleDelivery(context,stockItem.id,"2026-07-24T09:00:00Z"),
@@ -181,6 +186,7 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_stock_items(id,tenant_id,organization_id,site_id,asset_id,acquisition_mode,acquisition_cost_cents,status,created_by,created_at,updated_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,'purchase',100,'acquired',$5,now(),now())`,[t1,organizationId,otherSiteId,otherAssetId,context.actorId]),/vehicle_stock_tenant_organization_site_fk/);
     await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_publications(id,tenant_id,organization_id,site_id,stock_item_id,channel,asking_price_cents,status,published_by,published_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,'professional_website',1590000,'published',$5,now())`,[t1,otherOrganizationId,otherSiteId,stockItem.id,context.actorId]),/vehicle_publications_tenant_stock_scope_fk/);
     await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_flash_sales(id,tenant_id,organization_id,site_id,stock_item_id,price_cents,starts_at,ends_at,channels,status,created_by,created_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,1400000,now(),now()+interval '1 day',ARRAY['central_marketplace'],'scheduled',$5,now())`,[t1,otherOrganizationId,otherSiteId,stockItem.id,context.actorId]),/vehicle_flash_sale_scope_fk/);
+    await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_auctions(id,tenant_id,organization_id,site_id,stock_item_id,channel,starting_price_cents,reserve_price_cents,minimum_increment_cents,starts_at,ends_at,status,created_by,created_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,'central_marketplace',100,200,10,now(),now()+interval '1 day','scheduled',$5,now())`,[t1,otherOrganizationId,otherSiteId,stockItem.id,context.actorId]),/vehicle_auction_scope_fk/);
     const scopeTestStock=await commerce.acquire(context,{organizationId,siteId,assetId:otherAssetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});
     await commerce.startPreparation(context,scopeTestStock.id);
     const concurrencyCheck=await commerce.addPreparationCheck(context,scopeTestStock.id,{label:"Concurrency safety",required:true});
