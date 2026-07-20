@@ -60,8 +60,9 @@ Le découpage complet est dans `docs/DELIVERY_LOTS.md` et les décisions dans `d
 - Lot 5E : transfert de propriété après remise, mutation du passeport et preuve documentaire — terminé.
 - Lot 5F : dossier réglementaire de cession et demande de notification documentaire — terminé.
 - Lot 5G : ventes flash configurables par fenêtre et canaux publiés — terminé.
-- Lot 5H : enchères véhicule configurables et adjudication atomique — en revue.
-- Prochaine tranche après validation : paiements et garanties d'enchères.
+- Lot 5H : enchères véhicule configurables et adjudication atomique — terminé.
+- Lot 5I : garanties d'enchères, capture du gagnant et libération transactionnelle — en revue.
+- Prochaine tranche après validation : connecteur PSP et webhooks de paiement signés.
 
 ### Base locale
 

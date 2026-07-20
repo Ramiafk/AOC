@@ -1,30 +1,1033 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DomainError } from "../../core/src/errors.ts";
-import { newEntityId,tenantId,type RequestContext } from "../../core/src/identity.ts";
+import {
+  newEntityId,
+  tenantId,
+  type RequestContext,
+} from "../../core/src/identity.ts";
 import { InMemoryVehicleCommerceRepository } from "../src/in-memory-vehicle-commerce-repository.ts";
 import { ManageVehicleCommerce } from "../src/vehicle-commerce.ts";
 
-const context:RequestContext={tenantId:tenantId("11111111-1111-4111-8111-111111111111"),actorId:newEntityId(),correlationId:"vehicle-commerce"};
-function fixture(){const repository=new InMemoryVehicleCommerceRepository(),organizationId=newEntityId(),siteId=newEntityId(),assetId=newEntityId(),customerId=newEntityId(),sellerCustomerId=newEntityId(),documentId=newEntityId(),certificateDocumentId=newEntityId(),deliveryReceiptDocumentId=newEntityId(),certificateKey=`${context.tenantId}:${assetId}:${certificateDocumentId}`,receiptKey=`${context.tenantId}:${assetId}:${deliveryReceiptDocumentId}`;repository.assets.add(`${context.tenantId}:${assetId}`);repository.assetOwners.set(`${context.tenantId}:${assetId}`,sellerCustomerId);repository.documents.add(`${context.tenantId}:${assetId}:${documentId}`);repository.documentKinds.set(certificateKey,"cession_certificate");repository.documentKinds.set(receiptKey,"delivery_receipt");repository.documentOwners.set(certificateKey,customerId);repository.documentOwners.set(receiptKey,customerId);repository.customers.add(`${context.tenantId}:${customerId}`);repository.customers.add(`${context.tenantId}:${sellerCustomerId}`);repository.sites.set(`${context.tenantId}:${siteId}`,organizationId);return{repository,service:new ManageVehicleCommerce(repository,()=>new Date("2026-07-22T10:00:00Z")),organizationId,siteId,assetId,customerId,sellerCustomerId,documentId,certificateDocumentId,deliveryReceiptDocumentId};}
-async function merchandise(service:ManageVehicleCommerce,id:ReturnType<typeof newEntityId>){const check=await service.addPreparationCheck(context,id,{label:"Contrôle sécurité",required:true});await service.completePreparationCheck(context,id,check.id);await service.addMedia(context,id,{kind:"image",storageKey:`vehicles/${id}/cover.jpg`,position:0,primary:true});}
-test("moves acquired vehicle through preparation to multichannel publication",async()=>{const{repository,service,organizationId,siteId,assetId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"trade_in",acquisitionCostCents:1200000});await service.startPreparation(context,item.id);await merchandise(service,item.id);await service.markReady(context,item.id,1590000);await service.publish(context,item.id,"professional_website");await service.publish(context,item.id,"central_marketplace");assert.equal(repository.publications.length,2);assert.equal(repository.items[0]!.status,"published");});
-test("rejects incomplete preparation and duplicate channel publication",async()=>{const{service,organizationId,siteId,assetId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:100});await service.startPreparation(context,item.id);await assert.rejects(()=>service.markReady(context,item.id,200),(error:unknown)=>error instanceof DomainError&&error.code==="PREPARATION_INCOMPLETE");await merchandise(service,item.id);await service.markReady(context,item.id,200);await service.publish(context,item.id,"professional_app");await assert.rejects(()=>service.publish(context,item.id,"professional_app"),(error:unknown)=>error instanceof DomainError&&error.code==="CHANNEL_ALREADY_PUBLISHED");});
-test("serializes concurrent publication attempts",async()=>{const{repository,service,organizationId,siteId,assetId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"consignment",acquisitionCostCents:0});await service.startPreparation(context,item.id);await merchandise(service,item.id);await service.markReady(context,item.id,500);const results=await Promise.allSettled([service.publish(context,item.id,"central_marketplace"),service.publish(context,item.id,"central_marketplace")]);assert.equal(results.filter(result=>result.status==="fulfilled").length,1);assert.equal(repository.publications.length,1);});
-test("schedules and cancels a discounted flash sale on published channels",async()=>{const{repository,service,organizationId,siteId,assetId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});await service.startPreparation(context,item.id);await merchandise(service,item.id);await service.markReady(context,item.id,1500000);await service.publish(context,item.id,"professional_website");const sale=await service.scheduleFlashSale(context,item.id,{priceCents:1390000,startsAt:"2026-07-22T11:00:00Z",endsAt:"2026-07-23T11:00:00Z",channels:["professional_website","professional_website"]});assert.deepEqual(sale.channels,["professional_website"]);const cancelled=await service.cancelFlashSale(context,item.id);assert.equal(cancelled.status,"cancelled");assert.equal(repository.flashSales[0]!.closedBy,context.actorId);await assert.rejects(()=>service.cancelFlashSale(context,item.id),(error:unknown)=>error instanceof DomainError&&error.code==="FLASH_SALE_NOT_OPEN");});
-test("validates flash sale scope, discount, window and concurrent uniqueness",async()=>{const{repository,service,organizationId,siteId,assetId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});await service.startPreparation(context,item.id);await merchandise(service,item.id);await service.markReady(context,item.id,1500000);await service.publish(context,item.id,"central_marketplace");await assert.rejects(()=>service.scheduleFlashSale(context,item.id,{priceCents:1500000,startsAt:"2026-07-22T11:00:00Z",endsAt:"2026-07-23T11:00:00Z",channels:["central_marketplace"]}),(error:unknown)=>error instanceof DomainError&&error.code==="FLASH_PRICE_NOT_DISCOUNTED");await assert.rejects(()=>service.scheduleFlashSale(context,item.id,{priceCents:1400000,startsAt:"2026-07-21T11:00:00Z",endsAt:"2026-07-23T11:00:00Z",channels:["central_marketplace"]}),(error:unknown)=>error instanceof DomainError&&error.code==="INVALID_FLASH_SALE_WINDOW");await assert.rejects(()=>service.scheduleFlashSale(context,item.id,{priceCents:1400000,startsAt:"2026-07-22T11:00:00Z",endsAt:"2026-07-23T11:00:00Z",channels:["professional_app"]}),(error:unknown)=>error instanceof DomainError&&error.code==="FLASH_CHANNEL_NOT_PUBLISHED");const input={priceCents:1400000,startsAt:"2026-07-22T11:00:00Z",endsAt:"2026-07-23T11:00:00Z",channels:["central_marketplace"] as const},results=await Promise.allSettled([service.scheduleFlashSale(context,item.id,input),service.scheduleFlashSale(context,item.id,input)]);assert.equal(results.filter(result=>result.status==="fulfilled").length,1);assert.equal(repository.flashSales.length,1);const rejected=results.find(result=>result.status==="rejected");assert.ok(rejected?.status==="rejected"&&rejected.reason instanceof DomainError&&rejected.reason.code==="FLASH_SALE_ALREADY_OPEN");});
-test("expires an ended flash sale and preserves history before scheduling the next",async()=>{const{repository,service,organizationId,siteId,assetId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});await service.startPreparation(context,item.id);await merchandise(service,item.id);await service.markReady(context,item.id,1500000);await service.publish(context,item.id,"professional_website");await service.scheduleFlashSale(context,item.id,{priceCents:1400000,startsAt:"2026-07-22T11:00:00Z",endsAt:"2026-07-22T12:00:00Z",channels:["professional_website"]});const later=new ManageVehicleCommerce(repository,()=>new Date("2026-07-22T13:00:00Z"));await later.scheduleFlashSale(context,item.id,{priceCents:1350000,startsAt:"2026-07-22T14:00:00Z",endsAt:"2026-07-22T15:00:00Z",channels:["professional_website"]});assert.equal(repository.flashSales.length,2);assert.equal(repository.flashSales[0]!.status,"expired");assert.equal(repository.flashSales[0]!.closedReason,"expired");assert.equal(repository.flashSales[1]!.status,"scheduled");});
-test("closes an open flash sale atomically when the vehicle is sold or withdrawn",async()=>{const first=fixture(),item=await first.service.acquire(context,{organizationId:first.organizationId,siteId:first.siteId,assetId:first.assetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});await first.service.startPreparation(context,item.id);await merchandise(first.service,item.id);await first.service.markReady(context,item.id,1500000);await first.service.publish(context,item.id,"professional_website");await first.service.scheduleFlashSale(context,item.id,{priceCents:1400000,startsAt:"2026-07-22T11:00:00Z",endsAt:"2026-07-23T11:00:00Z",channels:["professional_website"]});await first.service.sell(context,item.id,{buyerCustomerId:first.customerId,salePriceCents:1400000});assert.equal(first.repository.flashSales[0]!.closedReason,"sold");const second=fixture(),other=await second.service.acquire(context,{organizationId:second.organizationId,siteId:second.siteId,assetId:second.assetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});await second.service.startPreparation(context,other.id);await merchandise(second.service,other.id);await second.service.markReady(context,other.id,1500000);await second.service.publish(context,other.id,"professional_website");await second.service.scheduleFlashSale(context,other.id,{priceCents:1400000,startsAt:"2026-07-22T11:00:00Z",endsAt:"2026-07-23T11:00:00Z",channels:["professional_website"]});await second.service.withdraw(context,other.id);assert.equal(second.repository.flashSales[0]!.closedReason,"withdrawn");assert.equal(second.repository.items[0]!.status,"withdrawn");assert.ok(second.repository.publications.every(value=>value.status==="withdrawn"));});
-test("awards an ended auction to the highest bidder above reserve",async()=>{const{repository,service,organizationId,siteId,assetId,customerId,sellerCustomerId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});await service.startPreparation(context,item.id);await merchandise(service,item.id);await service.markReady(context,item.id,1600000);await service.publish(context,item.id,"central_marketplace");const auction=await service.scheduleAuction(context,item.id,{channel:"central_marketplace",startingPriceCents:1200000,reservePriceCents:1400000,minimumIncrementCents:10000,startsAt:"2026-07-22T11:00:00Z",endsAt:"2026-07-22T12:00:00Z"});const bidding=new ManageVehicleCommerce(repository,()=>new Date("2026-07-22T11:30:00Z"));await bidding.placeAuctionBid(context,item.id,auction.id,{bidderCustomerId:sellerCustomerId,amountCents:1300000});const winner=await bidding.placeAuctionBid(context,item.id,auction.id,{bidderCustomerId:customerId,amountCents:1410000});const closing=new ManageVehicleCommerce(repository,()=>new Date("2026-07-22T12:01:00Z")),result=await closing.closeAuction(context,item.id,auction.id);assert.equal(result.auction.status,"sold");assert.equal(result.auction.winningBidId,winner.id);assert.equal(result.sale?.buyerCustomerId,customerId);assert.equal(result.sale?.grossMarginCents,410000);assert.equal(repository.items[0]!.status,"sold");assert.ok(repository.publications.every(value=>value.status==="withdrawn"));});
-test("serializes bids, enforces increments and closes below-reserve auction without sale",async()=>{const{repository,service,organizationId,siteId,assetId,customerId,sellerCustomerId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});await service.startPreparation(context,item.id);await merchandise(service,item.id);await service.markReady(context,item.id,1600000);await service.publish(context,item.id,"professional_website");const auction=await service.scheduleAuction(context,item.id,{channel:"professional_website",startingPriceCents:1200000,reservePriceCents:1500000,minimumIncrementCents:50000,startsAt:"2026-07-22T11:00:00Z",endsAt:"2026-07-22T12:00:00Z"}),bidding=new ManageVehicleCommerce(repository,()=>new Date("2026-07-22T11:30:00Z"));const results=await Promise.allSettled([bidding.placeAuctionBid(context,item.id,auction.id,{bidderCustomerId:customerId,amountCents:1250000}),bidding.placeAuctionBid(context,item.id,auction.id,{bidderCustomerId:sellerCustomerId,amountCents:1250000})]);assert.equal(results.filter(result=>result.status==="fulfilled").length,1);await assert.rejects(()=>bidding.placeAuctionBid(context,item.id,auction.id,{bidderCustomerId:sellerCustomerId,amountCents:1290000}),(error:unknown)=>error instanceof DomainError&&error.code==="BID_TOO_LOW");const closing=new ManageVehicleCommerce(repository,()=>new Date("2026-07-22T12:01:00Z")),closed=await closing.closeAuction(context,item.id,auction.id);assert.equal(closed.auction.status,"unsold");assert.equal(closed.sale,null);assert.equal(repository.items[0]!.status,"published");});
-test("validates auction window, pricing, channel and cancellation on direct stock exit",async()=>{const first=fixture(),item=await first.service.acquire(context,{organizationId:first.organizationId,siteId:first.siteId,assetId:first.assetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});await first.service.startPreparation(context,item.id);await merchandise(first.service,item.id);await first.service.markReady(context,item.id,1600000);await first.service.publish(context,item.id,"professional_app");await assert.rejects(()=>first.service.scheduleAuction(context,item.id,{channel:"central_marketplace",startingPriceCents:1200000,reservePriceCents:1100000,minimumIncrementCents:0,startsAt:"2026-07-22T11:00:00Z",endsAt:"2026-07-22T12:00:00Z"}),(error:unknown)=>error instanceof DomainError&&error.code==="INVALID_AUCTION_PRICING");await assert.rejects(()=>first.service.scheduleAuction(context,item.id,{channel:"central_marketplace",startingPriceCents:1200000,reservePriceCents:1300000,minimumIncrementCents:10000,startsAt:"2026-07-22T11:00:00Z",endsAt:"2026-07-22T12:00:00Z"}),(error:unknown)=>error instanceof DomainError&&error.code==="AUCTION_CHANNEL_NOT_PUBLISHED");const auction=await first.service.scheduleAuction(context,item.id,{channel:"professional_app",startingPriceCents:1200000,reservePriceCents:1300000,minimumIncrementCents:10000,startsAt:"2026-07-22T11:00:00Z",endsAt:"2026-07-22T12:00:00Z"});await first.service.sell(context,item.id,{buyerCustomerId:first.customerId,salePriceCents:1500000});assert.equal(first.repository.auctions.find(value=>value.id===auction.id)?.closedReason,"direct_sale");});
-test("locks merchandising mutations and rejects them outside preparing",async()=>{const{repository,service,organizationId,siteId,assetId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:100});await service.startPreparation(context,item.id);const check=await service.addPreparationCheck(context,item.id,{label:"Safety",required:true});await service.completePreparationCheck(context,item.id,check.id);await service.addMedia(context,item.id,{kind:"image",storageKey:"vehicles/cover.jpg",position:0,primary:true});await service.markReady(context,item.id,200);await assert.rejects(()=>service.addPreparationCheck(context,item.id,{label:"Late check",required:true}),(error:unknown)=>error instanceof DomainError&&error.code==="STOCK_ITEM_NOT_PREPARING");await assert.rejects(()=>service.completePreparationCheck(context,item.id,check.id),(error:unknown)=>error instanceof DomainError&&error.code==="STOCK_ITEM_NOT_PREPARING");await assert.rejects(()=>service.addMedia(context,item.id,{kind:"image",storageKey:"vehicles/late.jpg",position:1,primary:false}),(error:unknown)=>error instanceof DomainError&&error.code==="STOCK_ITEM_NOT_PREPARING");assert.equal(repository.checks.length,1);assert.equal(repository.media.length,1);});
-test("serializes mark ready against a late required check",async()=>{const{repository,service,organizationId,siteId,assetId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:100});await service.startPreparation(context,item.id);await merchandise(service,item.id);const results=await Promise.allSettled([service.markReady(context,item.id,200),service.addPreparationCheck(context,item.id,{label:"Late required",required:true})]);assert.equal(results.filter(result=>result.status==="fulfilled").length,1);const current=repository.items.find(value=>value.id===item.id)!;const incomplete=repository.checks.some(value=>value.stockItemId===item.id&&value.required&&!value.completedAt);assert.ok(current.status!=="ready"||!incomplete);});
-test("enforces tenant, asset and site scope",async()=>{const{service,organizationId,siteId,assetId}=fixture();await assert.rejects(()=>service.acquire(context,{organizationId,siteId:newEntityId(),assetId,acquisitionMode:"purchase",acquisitionCostCents:0}),(error:unknown)=>error instanceof DomainError&&error.code==="SITE_SCOPE_MISMATCH");const other={...context,tenantId:tenantId("22222222-2222-4222-8222-222222222222")};const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:0});await assert.rejects(()=>service.startPreparation(other,item.id),(error:unknown)=>error instanceof DomainError&&error.code==="STOCK_ITEM_NOT_FOUND");});
-test("sells a published vehicle, calculates gross margin and withdraws every publication",async()=>{const{repository,service,organizationId,siteId,assetId,customerId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});await service.startPreparation(context,item.id);await merchandise(service,item.id);await service.markReady(context,item.id,1500000);await service.publish(context,item.id,"professional_website");await service.publish(context,item.id,"central_marketplace");const result=await service.sell(context,item.id,{buyerCustomerId:customerId,salePriceCents:1450000});assert.equal(result.sale.grossMarginCents,450000);assert.equal(repository.items[0]!.status,"sold");assert.ok(repository.publications.every(value=>value.status==="withdrawn"));await assert.rejects(()=>service.sell(context,item.id,{buyerCustomerId:customerId,salePriceCents:1450000}),(error:unknown)=>error instanceof DomainError&&error.code==="STOCK_ITEM_NOT_SELLABLE");});
-test("serializes concurrent sales and records exactly one sale",async()=>{const{repository,service,organizationId,siteId,assetId,customerId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});await service.startPreparation(context,item.id);await merchandise(service,item.id);await service.markReady(context,item.id,1500000);await service.publish(context,item.id,"professional_website");const results=await Promise.allSettled([service.sell(context,item.id,{buyerCustomerId:customerId,salePriceCents:1450000}),service.sell(context,item.id,{buyerCustomerId:customerId,salePriceCents:1450000})]);assert.equal(results.filter(result=>result.status==="fulfilled").length,1);assert.equal(repository.sales.length,1);});
-test("schedules and completes an auditable vehicle handover",async()=>{const{repository,service,organizationId,siteId,assetId,customerId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});await service.startPreparation(context,item.id);await merchandise(service,item.id);await service.markReady(context,item.id,1500000);await service.publish(context,item.id,"professional_website");await service.sell(context,item.id,{buyerCustomerId:customerId,salePriceCents:1450000});const delivery=await service.scheduleDelivery(context,item.id,"2026-07-24T09:00:00+02:00");assert.equal(delivery.status,"scheduled");const result=await service.completeDelivery(context,item.id,{handoverOdometerKm:41200,notes:"  Remis avec deux clés  "});assert.equal(result.stockItem.status,"delivered");assert.equal(result.delivery.notes,"Remis avec deux clés");assert.equal(repository.deliveries[0]!.status,"completed");await assert.rejects(()=>service.completeDelivery(context,item.id,{handoverOdometerKm:41200}),(error:unknown)=>error instanceof DomainError&&error.code==="STOCK_ITEM_NOT_DELIVERABLE");});
-test("allows only one delivery schedule under concurrency",async()=>{const{repository,service,organizationId,siteId,assetId,customerId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});await service.startPreparation(context,item.id);await merchandise(service,item.id);await service.markReady(context,item.id,1500000);await service.publish(context,item.id,"professional_website");await service.sell(context,item.id,{buyerCustomerId:customerId,salePriceCents:1450000});const results=await Promise.allSettled([service.scheduleDelivery(context,item.id,"2026-07-24T09:00:00Z"),service.scheduleDelivery(context,item.id,"2026-07-25T09:00:00Z")]);assert.equal(results.filter(result=>result.status==="fulfilled").length,1);assert.equal(repository.deliveries.length,1);});
-test("transfers asset ownership with documentary evidence after delivery",async()=>{const{repository,service,organizationId,siteId,assetId,customerId,sellerCustomerId,documentId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});await service.startPreparation(context,item.id);await merchandise(service,item.id);await service.markReady(context,item.id,1500000);await service.publish(context,item.id,"professional_website");await service.sell(context,item.id,{buyerCustomerId:customerId,salePriceCents:1450000});await service.scheduleDelivery(context,item.id,"2026-07-24T09:00:00Z");await service.completeDelivery(context,item.id,{handoverOdometerKm:41200});const transfer=await service.transferOwnership(context,item.id,[documentId,documentId]);assert.equal(transfer.previousOwnerCustomerId,sellerCustomerId);assert.equal(transfer.newOwnerCustomerId,customerId);assert.equal(transfer.documentIds.length,1);assert.equal(repository.assetOwners.get(`${context.tenantId}:${assetId}`),customerId);assert.equal(repository.transfers.length,1);await assert.rejects(()=>service.transferOwnership(context,item.id,[documentId]),(error:unknown)=>error instanceof DomainError&&error.code==="OWNERSHIP_ALREADY_TRANSFERRED");});
-test("rejects ownership transfer before delivery or without vehicle evidence",async()=>{const{service,organizationId,siteId,assetId,customerId,documentId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});await service.startPreparation(context,item.id);await merchandise(service,item.id);await service.markReady(context,item.id,1500000);await service.publish(context,item.id,"professional_website");await service.sell(context,item.id,{buyerCustomerId:customerId,salePriceCents:1450000});await assert.rejects(()=>service.transferOwnership(context,item.id,[documentId]),(error:unknown)=>error instanceof DomainError&&error.code==="STOCK_ITEM_NOT_DELIVERED");await service.scheduleDelivery(context,item.id,"2026-07-24T09:00:00Z");await service.completeDelivery(context,item.id,{handoverOdometerKm:41200});await assert.rejects(()=>service.transferOwnership(context,item.id,[]),(error:unknown)=>error instanceof DomainError&&error.code==="TRANSFER_DOCUMENT_REQUIRED");await assert.rejects(()=>service.transferOwnership(context,item.id,[newEntityId()]),(error:unknown)=>error instanceof DomainError&&error.code==="INVALID_TRANSFER_DOCUMENT");});
-test("issues one cession dossier with buyer-owned document kinds after ownership transfer",async()=>{const{repository,service,organizationId,siteId,assetId,customerId,sellerCustomerId,documentId,certificateDocumentId,deliveryReceiptDocumentId}=fixture();const item=await service.acquire(context,{organizationId,siteId,assetId,acquisitionMode:"purchase",acquisitionCostCents:1000000});await service.startPreparation(context,item.id);await merchandise(service,item.id);await service.markReady(context,item.id,1500000);await service.publish(context,item.id,"professional_website");await service.sell(context,item.id,{buyerCustomerId:customerId,salePriceCents:1450000});await service.scheduleDelivery(context,item.id,"2026-07-24T09:00:00Z");await service.completeDelivery(context,item.id,{handoverOdometerKm:41200});await assert.rejects(()=>service.issueCessionDossier(context,item.id,{certificateDocumentId,deliveryReceiptDocumentId}),(error:unknown)=>error instanceof DomainError&&error.code==="OWNERSHIP_TRANSFER_REQUIRED");await service.transferOwnership(context,item.id,[documentId]);const receiptKey=`${context.tenantId}:${assetId}:${deliveryReceiptDocumentId}`;repository.documentOwners.set(receiptKey,sellerCustomerId);await assert.rejects(()=>service.issueCessionDossier(context,item.id,{certificateDocumentId,deliveryReceiptDocumentId}),(error:unknown)=>error instanceof DomainError&&error.code==="INVALID_CESSION_DOCUMENTS");repository.documentOwners.set(receiptKey,customerId);const results=await Promise.allSettled([service.issueCessionDossier(context,item.id,{certificateDocumentId,deliveryReceiptDocumentId}),service.issueCessionDossier(context,item.id,{certificateDocumentId,deliveryReceiptDocumentId})]);assert.equal(results.filter(result=>result.status==="fulfilled").length,1);const rejected=results.find(result=>result.status==="rejected");assert.ok(rejected?.status==="rejected"&&rejected.reason instanceof DomainError&&rejected.reason.code==="CESSION_DOSSIER_ALREADY_ISSUED");assert.equal(repository.cessionDossiers[0]!.customerId,customerId);assert.equal(repository.cessionDossiers.length,1);await assert.rejects(()=>service.issueCessionDossier(context,item.id,{certificateDocumentId,deliveryReceiptDocumentId:certificateDocumentId}),(error:unknown)=>error instanceof DomainError&&error.code==="CESSION_DOCUMENTS_MUST_DIFFER");});
+const context: RequestContext = {
+  tenantId: tenantId("11111111-1111-4111-8111-111111111111"),
+  actorId: newEntityId(),
+  correlationId: "vehicle-commerce",
+};
+function fixture() {
+  const repository = new InMemoryVehicleCommerceRepository(),
+    organizationId = newEntityId(),
+    siteId = newEntityId(),
+    assetId = newEntityId(),
+    customerId = newEntityId(),
+    sellerCustomerId = newEntityId(),
+    documentId = newEntityId(),
+    certificateDocumentId = newEntityId(),
+    deliveryReceiptDocumentId = newEntityId(),
+    certificateKey = `${context.tenantId}:${assetId}:${certificateDocumentId}`,
+    receiptKey = `${context.tenantId}:${assetId}:${deliveryReceiptDocumentId}`;
+  repository.assets.add(`${context.tenantId}:${assetId}`);
+  repository.assetOwners.set(
+    `${context.tenantId}:${assetId}`,
+    sellerCustomerId,
+  );
+  repository.documents.add(`${context.tenantId}:${assetId}:${documentId}`);
+  repository.documentKinds.set(certificateKey, "cession_certificate");
+  repository.documentKinds.set(receiptKey, "delivery_receipt");
+  repository.documentOwners.set(certificateKey, customerId);
+  repository.documentOwners.set(receiptKey, customerId);
+  repository.customers.add(`${context.tenantId}:${customerId}`);
+  repository.customers.add(`${context.tenantId}:${sellerCustomerId}`);
+  repository.sites.set(`${context.tenantId}:${siteId}`, organizationId);
+  return {
+    repository,
+    service: new ManageVehicleCommerce(
+      repository,
+      () => new Date("2026-07-22T10:00:00Z"),
+    ),
+    organizationId,
+    siteId,
+    assetId,
+    customerId,
+    sellerCustomerId,
+    documentId,
+    certificateDocumentId,
+    deliveryReceiptDocumentId,
+  };
+}
+async function merchandise(
+  service: ManageVehicleCommerce,
+  id: ReturnType<typeof newEntityId>,
+) {
+  const check = await service.addPreparationCheck(context, id, {
+    label: "Contrôle sécurité",
+    required: true,
+  });
+  await service.completePreparationCheck(context, id, check.id);
+  await service.addMedia(context, id, {
+    kind: "image",
+    storageKey: `vehicles/${id}/cover.jpg`,
+    position: 0,
+    primary: true,
+  });
+}
+test("moves acquired vehicle through preparation to multichannel publication", async () => {
+  const { repository, service, organizationId, siteId, assetId } = fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "trade_in",
+    acquisitionCostCents: 1200000,
+  });
+  await service.startPreparation(context, item.id);
+  await merchandise(service, item.id);
+  await service.markReady(context, item.id, 1590000);
+  await service.publish(context, item.id, "professional_website");
+  await service.publish(context, item.id, "central_marketplace");
+  assert.equal(repository.publications.length, 2);
+  assert.equal(repository.items[0]!.status, "published");
+});
+test("rejects incomplete preparation and duplicate channel publication", async () => {
+  const { service, organizationId, siteId, assetId } = fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 100,
+  });
+  await service.startPreparation(context, item.id);
+  await assert.rejects(
+    () => service.markReady(context, item.id, 200),
+    (error: unknown) =>
+      error instanceof DomainError && error.code === "PREPARATION_INCOMPLETE",
+  );
+  await merchandise(service, item.id);
+  await service.markReady(context, item.id, 200);
+  await service.publish(context, item.id, "professional_app");
+  await assert.rejects(
+    () => service.publish(context, item.id, "professional_app"),
+    (error: unknown) =>
+      error instanceof DomainError &&
+      error.code === "CHANNEL_ALREADY_PUBLISHED",
+  );
+});
+test("serializes concurrent publication attempts", async () => {
+  const { repository, service, organizationId, siteId, assetId } = fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "consignment",
+    acquisitionCostCents: 0,
+  });
+  await service.startPreparation(context, item.id);
+  await merchandise(service, item.id);
+  await service.markReady(context, item.id, 500);
+  const results = await Promise.allSettled([
+    service.publish(context, item.id, "central_marketplace"),
+    service.publish(context, item.id, "central_marketplace"),
+  ]);
+  assert.equal(
+    results.filter((result) => result.status === "fulfilled").length,
+    1,
+  );
+  assert.equal(repository.publications.length, 1);
+});
+test("schedules and cancels a discounted flash sale on published channels", async () => {
+  const { repository, service, organizationId, siteId, assetId } = fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 1000000,
+  });
+  await service.startPreparation(context, item.id);
+  await merchandise(service, item.id);
+  await service.markReady(context, item.id, 1500000);
+  await service.publish(context, item.id, "professional_website");
+  const sale = await service.scheduleFlashSale(context, item.id, {
+    priceCents: 1390000,
+    startsAt: "2026-07-22T11:00:00Z",
+    endsAt: "2026-07-23T11:00:00Z",
+    channels: ["professional_website", "professional_website"],
+  });
+  assert.deepEqual(sale.channels, ["professional_website"]);
+  const cancelled = await service.cancelFlashSale(context, item.id);
+  assert.equal(cancelled.status, "cancelled");
+  assert.equal(repository.flashSales[0]!.closedBy, context.actorId);
+  await assert.rejects(
+    () => service.cancelFlashSale(context, item.id),
+    (error: unknown) =>
+      error instanceof DomainError && error.code === "FLASH_SALE_NOT_OPEN",
+  );
+});
+test("validates flash sale scope, discount, window and concurrent uniqueness", async () => {
+  const { repository, service, organizationId, siteId, assetId } = fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 1000000,
+  });
+  await service.startPreparation(context, item.id);
+  await merchandise(service, item.id);
+  await service.markReady(context, item.id, 1500000);
+  await service.publish(context, item.id, "central_marketplace");
+  await assert.rejects(
+    () =>
+      service.scheduleFlashSale(context, item.id, {
+        priceCents: 1500000,
+        startsAt: "2026-07-22T11:00:00Z",
+        endsAt: "2026-07-23T11:00:00Z",
+        channels: ["central_marketplace"],
+      }),
+    (error: unknown) =>
+      error instanceof DomainError &&
+      error.code === "FLASH_PRICE_NOT_DISCOUNTED",
+  );
+  await assert.rejects(
+    () =>
+      service.scheduleFlashSale(context, item.id, {
+        priceCents: 1400000,
+        startsAt: "2026-07-21T11:00:00Z",
+        endsAt: "2026-07-23T11:00:00Z",
+        channels: ["central_marketplace"],
+      }),
+    (error: unknown) =>
+      error instanceof DomainError &&
+      error.code === "INVALID_FLASH_SALE_WINDOW",
+  );
+  await assert.rejects(
+    () =>
+      service.scheduleFlashSale(context, item.id, {
+        priceCents: 1400000,
+        startsAt: "2026-07-22T11:00:00Z",
+        endsAt: "2026-07-23T11:00:00Z",
+        channels: ["professional_app"],
+      }),
+    (error: unknown) =>
+      error instanceof DomainError &&
+      error.code === "FLASH_CHANNEL_NOT_PUBLISHED",
+  );
+  const input = {
+      priceCents: 1400000,
+      startsAt: "2026-07-22T11:00:00Z",
+      endsAt: "2026-07-23T11:00:00Z",
+      channels: ["central_marketplace"] as const,
+    },
+    results = await Promise.allSettled([
+      service.scheduleFlashSale(context, item.id, input),
+      service.scheduleFlashSale(context, item.id, input),
+    ]);
+  assert.equal(
+    results.filter((result) => result.status === "fulfilled").length,
+    1,
+  );
+  assert.equal(repository.flashSales.length, 1);
+  const rejected = results.find((result) => result.status === "rejected");
+  assert.ok(
+    rejected?.status === "rejected" &&
+      rejected.reason instanceof DomainError &&
+      rejected.reason.code === "FLASH_SALE_ALREADY_OPEN",
+  );
+});
+test("expires an ended flash sale and preserves history before scheduling the next", async () => {
+  const { repository, service, organizationId, siteId, assetId } = fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 1000000,
+  });
+  await service.startPreparation(context, item.id);
+  await merchandise(service, item.id);
+  await service.markReady(context, item.id, 1500000);
+  await service.publish(context, item.id, "professional_website");
+  await service.scheduleFlashSale(context, item.id, {
+    priceCents: 1400000,
+    startsAt: "2026-07-22T11:00:00Z",
+    endsAt: "2026-07-22T12:00:00Z",
+    channels: ["professional_website"],
+  });
+  const later = new ManageVehicleCommerce(
+    repository,
+    () => new Date("2026-07-22T13:00:00Z"),
+  );
+  await later.scheduleFlashSale(context, item.id, {
+    priceCents: 1350000,
+    startsAt: "2026-07-22T14:00:00Z",
+    endsAt: "2026-07-22T15:00:00Z",
+    channels: ["professional_website"],
+  });
+  assert.equal(repository.flashSales.length, 2);
+  assert.equal(repository.flashSales[0]!.status, "expired");
+  assert.equal(repository.flashSales[0]!.closedReason, "expired");
+  assert.equal(repository.flashSales[1]!.status, "scheduled");
+});
+test("closes an open flash sale atomically when the vehicle is sold or withdrawn", async () => {
+  const first = fixture(),
+    item = await first.service.acquire(context, {
+      organizationId: first.organizationId,
+      siteId: first.siteId,
+      assetId: first.assetId,
+      acquisitionMode: "purchase",
+      acquisitionCostCents: 1000000,
+    });
+  await first.service.startPreparation(context, item.id);
+  await merchandise(first.service, item.id);
+  await first.service.markReady(context, item.id, 1500000);
+  await first.service.publish(context, item.id, "professional_website");
+  await first.service.scheduleFlashSale(context, item.id, {
+    priceCents: 1400000,
+    startsAt: "2026-07-22T11:00:00Z",
+    endsAt: "2026-07-23T11:00:00Z",
+    channels: ["professional_website"],
+  });
+  await first.service.sell(context, item.id, {
+    buyerCustomerId: first.customerId,
+    salePriceCents: 1400000,
+  });
+  assert.equal(first.repository.flashSales[0]!.closedReason, "sold");
+  const second = fixture(),
+    other = await second.service.acquire(context, {
+      organizationId: second.organizationId,
+      siteId: second.siteId,
+      assetId: second.assetId,
+      acquisitionMode: "purchase",
+      acquisitionCostCents: 1000000,
+    });
+  await second.service.startPreparation(context, other.id);
+  await merchandise(second.service, other.id);
+  await second.service.markReady(context, other.id, 1500000);
+  await second.service.publish(context, other.id, "professional_website");
+  await second.service.scheduleFlashSale(context, other.id, {
+    priceCents: 1400000,
+    startsAt: "2026-07-22T11:00:00Z",
+    endsAt: "2026-07-23T11:00:00Z",
+    channels: ["professional_website"],
+  });
+  await second.service.withdraw(context, other.id);
+  assert.equal(second.repository.flashSales[0]!.closedReason, "withdrawn");
+  assert.equal(second.repository.items[0]!.status, "withdrawn");
+  assert.ok(
+    second.repository.publications.every(
+      (value) => value.status === "withdrawn",
+    ),
+  );
+});
+test("awards an ended auction to the highest bidder above reserve", async () => {
+  const {
+    repository,
+    service,
+    organizationId,
+    siteId,
+    assetId,
+    customerId,
+    sellerCustomerId,
+  } = fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 1000000,
+  });
+  await service.startPreparation(context, item.id);
+  await merchandise(service, item.id);
+  await service.markReady(context, item.id, 1600000);
+  await service.publish(context, item.id, "central_marketplace");
+  const auction = await service.scheduleAuction(context, item.id, {
+    channel: "central_marketplace",
+    startingPriceCents: 1200000,
+    reservePriceCents: 1400000,
+    minimumIncrementCents: 10000,
+    startsAt: "2026-07-22T11:00:00Z",
+    endsAt: "2026-07-22T12:00:00Z",
+  });
+  const bidding = new ManageVehicleCommerce(
+    repository,
+    () => new Date("2026-07-22T11:30:00Z"),
+  );
+  const losingGuarantee = await bidding.authorizeAuctionGuarantee(
+    context,
+    item.id,
+    auction.id,
+    {
+      bidderCustomerId: sellerCustomerId,
+      provider: "test_psp",
+      providerReference: "auth-loser",
+      idempotencyKey: "guarantee-loser",
+      amountCents: auction.guaranteeAmountCents,
+      currency: auction.currency,
+    },
+  );
+  const winningGuarantee = await bidding.authorizeAuctionGuarantee(
+    context,
+    item.id,
+    auction.id,
+    {
+      bidderCustomerId: customerId,
+      provider: "test_psp",
+      providerReference: "auth-winner",
+      idempotencyKey: "guarantee-winner",
+      amountCents: auction.guaranteeAmountCents,
+      currency: auction.currency,
+    },
+  );
+  await bidding.placeAuctionBid(context, item.id, auction.id, {
+    bidderCustomerId: sellerCustomerId,
+    amountCents: 1300000,
+  });
+  const winner = await bidding.placeAuctionBid(context, item.id, auction.id, {
+    bidderCustomerId: customerId,
+    amountCents: 1410000,
+  });
+  const closing = new ManageVehicleCommerce(
+      repository,
+      () => new Date("2026-07-22T12:01:00Z"),
+    ),
+    result = await closing.closeAuction(context, item.id, auction.id);
+  assert.equal(result.auction.status, "sold");
+  assert.equal(result.auction.winningBidId, winner.id);
+  assert.equal(result.sale?.buyerCustomerId, customerId);
+  assert.equal(result.sale?.grossMarginCents, 410000);
+  assert.equal(repository.items[0]!.status, "sold");
+  assert.equal(
+    repository.auctionGuarantees.find((value) => value.id === winningGuarantee.id)
+      ?.status,
+    "captured",
+  );
+  assert.equal(
+    repository.auctionGuarantees.find((value) => value.id === losingGuarantee.id)
+      ?.status,
+    "released",
+  );
+  assert.ok(
+    repository.publications.every((value) => value.status === "withdrawn"),
+  );
+});
+test("serializes bids, enforces increments and closes below-reserve auction without sale", async () => {
+  const {
+    repository,
+    service,
+    organizationId,
+    siteId,
+    assetId,
+    customerId,
+    sellerCustomerId,
+  } = fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 1000000,
+  });
+  await service.startPreparation(context, item.id);
+  await merchandise(service, item.id);
+  await service.markReady(context, item.id, 1600000);
+  await service.publish(context, item.id, "professional_website");
+  const auction = await service.scheduleAuction(context, item.id, {
+      channel: "professional_website",
+      startingPriceCents: 1200000,
+      reservePriceCents: 1500000,
+      minimumIncrementCents: 50000,
+      startsAt: "2026-07-22T11:00:00Z",
+      endsAt: "2026-07-22T12:00:00Z",
+    }),
+    bidding = new ManageVehicleCommerce(
+      repository,
+      () => new Date("2026-07-22T11:30:00Z"),
+    );
+  await assert.rejects(
+    () =>
+      bidding.placeAuctionBid(context, item.id, auction.id, {
+        bidderCustomerId: customerId,
+        amountCents: 1250000,
+      }),
+    (error: unknown) =>
+      error instanceof DomainError && error.code === "AUCTION_GUARANTEE_REQUIRED",
+  );
+  await bidding.authorizeAuctionGuarantee(context, item.id, auction.id, {
+    bidderCustomerId: customerId,
+    provider: "test_psp",
+    providerReference: "auth-customer",
+    idempotencyKey: "guarantee-customer",
+    amountCents: auction.guaranteeAmountCents,
+    currency: auction.currency,
+  });
+  await bidding.authorizeAuctionGuarantee(context, item.id, auction.id, {
+    bidderCustomerId: sellerCustomerId,
+    provider: "test_psp",
+    providerReference: "auth-seller",
+    idempotencyKey: "guarantee-seller",
+    amountCents: auction.guaranteeAmountCents,
+    currency: auction.currency,
+  });
+  const results = await Promise.allSettled([
+    bidding.placeAuctionBid(context, item.id, auction.id, {
+      bidderCustomerId: customerId,
+      amountCents: 1250000,
+    }),
+    bidding.placeAuctionBid(context, item.id, auction.id, {
+      bidderCustomerId: sellerCustomerId,
+      amountCents: 1250000,
+    }),
+  ]);
+  assert.equal(
+    results.filter((result) => result.status === "fulfilled").length,
+    1,
+  );
+  await assert.rejects(
+    () =>
+      bidding.placeAuctionBid(context, item.id, auction.id, {
+        bidderCustomerId: sellerCustomerId,
+        amountCents: 1290000,
+      }),
+    (error: unknown) =>
+      error instanceof DomainError && error.code === "BID_TOO_LOW",
+  );
+  const closing = new ManageVehicleCommerce(
+      repository,
+      () => new Date("2026-07-22T12:01:00Z"),
+    ),
+    closed = await closing.closeAuction(context, item.id, auction.id);
+  assert.equal(closed.auction.status, "unsold");
+  assert.equal(closed.sale, null);
+  assert.equal(repository.items[0]!.status, "published");
+  assert.ok(
+    repository.auctionGuarantees.every(
+      (value) => value.status === "released" && value.closedReason === "unsold",
+    ),
+  );
+});
+test("validates auction window, pricing, channel and cancellation on direct stock exit", async () => {
+  const first = fixture(),
+    item = await first.service.acquire(context, {
+      organizationId: first.organizationId,
+      siteId: first.siteId,
+      assetId: first.assetId,
+      acquisitionMode: "purchase",
+      acquisitionCostCents: 1000000,
+    });
+  await first.service.startPreparation(context, item.id);
+  await merchandise(first.service, item.id);
+  await first.service.markReady(context, item.id, 1600000);
+  await first.service.publish(context, item.id, "professional_app");
+  await assert.rejects(
+    () =>
+      first.service.scheduleAuction(context, item.id, {
+        channel: "central_marketplace",
+        startingPriceCents: 1200000,
+        reservePriceCents: 1100000,
+        minimumIncrementCents: 0,
+        startsAt: "2026-07-22T11:00:00Z",
+        endsAt: "2026-07-22T12:00:00Z",
+      }),
+    (error: unknown) =>
+      error instanceof DomainError && error.code === "INVALID_AUCTION_PRICING",
+  );
+  await assert.rejects(
+    () =>
+      first.service.scheduleAuction(context, item.id, {
+        channel: "central_marketplace",
+        startingPriceCents: 1200000,
+        reservePriceCents: 1300000,
+        minimumIncrementCents: 10000,
+        startsAt: "2026-07-22T11:00:00Z",
+        endsAt: "2026-07-22T12:00:00Z",
+      }),
+    (error: unknown) =>
+      error instanceof DomainError &&
+      error.code === "AUCTION_CHANNEL_NOT_PUBLISHED",
+  );
+  const auction = await first.service.scheduleAuction(context, item.id, {
+    channel: "professional_app",
+    startingPriceCents: 1200000,
+    reservePriceCents: 1300000,
+    minimumIncrementCents: 10000,
+    startsAt: "2026-07-22T11:00:00Z",
+    endsAt: "2026-07-22T12:00:00Z",
+  });
+  await first.service.sell(context, item.id, {
+    buyerCustomerId: first.customerId,
+    salePriceCents: 1500000,
+  });
+  assert.equal(
+    first.repository.auctions.find((value) => value.id === auction.id)
+      ?.closedReason,
+    "direct_sale",
+  );
+});
+test("replays only an identical guarantee request and rejects scoped idempotency collisions", async () => {
+  const repository = new InMemoryVehicleCommerceRepository();
+  const base = {
+    id: newEntityId(),
+    tenantId: context.tenantId,
+    organizationId: newEntityId(),
+    siteId: newEntityId(),
+    auctionId: newEntityId(),
+    stockItemId: newEntityId(),
+    bidderCustomerId: newEntityId(),
+    provider: "test_psp",
+    providerReference: "auth-canonical",
+    idempotencyKey: "canonical-guarantee",
+    amountCents: 50000,
+    currency: "EUR",
+    status: "authorized" as const,
+    authorizedAt: "2026-07-22T11:00:00Z",
+  };
+  const first = await repository.authorizeAuctionGuarantee(base);
+  const replay = await repository.authorizeAuctionGuarantee({
+    ...base,
+    id: newEntityId(),
+    authorizedAt: "2026-07-22T11:01:00Z",
+  });
+  assert.equal(replay.id, first.id);
+
+  for (const collision of [
+    { organizationId: newEntityId() },
+    { siteId: newEntityId() },
+    { stockItemId: newEntityId() },
+    { bidderCustomerId: newEntityId() },
+    { providerReference: "auth-different" },
+    { amountCents: 60000 },
+  ]) {
+    await assert.rejects(
+      () =>
+        repository.authorizeAuctionGuarantee({
+          ...base,
+          ...collision,
+          id: newEntityId(),
+        }),
+      (error: unknown) =>
+        error instanceof DomainError &&
+        error.code === "AUCTION_GUARANTEE_IDEMPOTENCY_CONFLICT",
+    );
+  }
+  assert.equal(repository.auctionGuarantees.length, 1);
+});
+test("locks merchandising mutations and rejects them outside preparing", async () => {
+  const { repository, service, organizationId, siteId, assetId } = fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 100,
+  });
+  await service.startPreparation(context, item.id);
+  const check = await service.addPreparationCheck(context, item.id, {
+    label: "Safety",
+    required: true,
+  });
+  await service.completePreparationCheck(context, item.id, check.id);
+  await service.addMedia(context, item.id, {
+    kind: "image",
+    storageKey: "vehicles/cover.jpg",
+    position: 0,
+    primary: true,
+  });
+  await service.markReady(context, item.id, 200);
+  await assert.rejects(
+    () =>
+      service.addPreparationCheck(context, item.id, {
+        label: "Late check",
+        required: true,
+      }),
+    (error: unknown) =>
+      error instanceof DomainError && error.code === "STOCK_ITEM_NOT_PREPARING",
+  );
+  await assert.rejects(
+    () => service.completePreparationCheck(context, item.id, check.id),
+    (error: unknown) =>
+      error instanceof DomainError && error.code === "STOCK_ITEM_NOT_PREPARING",
+  );
+  await assert.rejects(
+    () =>
+      service.addMedia(context, item.id, {
+        kind: "image",
+        storageKey: "vehicles/late.jpg",
+        position: 1,
+        primary: false,
+      }),
+    (error: unknown) =>
+      error instanceof DomainError && error.code === "STOCK_ITEM_NOT_PREPARING",
+  );
+  assert.equal(repository.checks.length, 1);
+  assert.equal(repository.media.length, 1);
+});
+test("serializes mark ready against a late required check", async () => {
+  const { repository, service, organizationId, siteId, assetId } = fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 100,
+  });
+  await service.startPreparation(context, item.id);
+  await merchandise(service, item.id);
+  const results = await Promise.allSettled([
+    service.markReady(context, item.id, 200),
+    service.addPreparationCheck(context, item.id, {
+      label: "Late required",
+      required: true,
+    }),
+  ]);
+  assert.equal(
+    results.filter((result) => result.status === "fulfilled").length,
+    1,
+  );
+  const current = repository.items.find((value) => value.id === item.id)!;
+  const incomplete = repository.checks.some(
+    (value) =>
+      value.stockItemId === item.id && value.required && !value.completedAt,
+  );
+  assert.ok(current.status !== "ready" || !incomplete);
+});
+test("enforces tenant, asset and site scope", async () => {
+  const { service, organizationId, siteId, assetId } = fixture();
+  await assert.rejects(
+    () =>
+      service.acquire(context, {
+        organizationId,
+        siteId: newEntityId(),
+        assetId,
+        acquisitionMode: "purchase",
+        acquisitionCostCents: 0,
+      }),
+    (error: unknown) =>
+      error instanceof DomainError && error.code === "SITE_SCOPE_MISMATCH",
+  );
+  const other = {
+    ...context,
+    tenantId: tenantId("22222222-2222-4222-8222-222222222222"),
+  };
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 0,
+  });
+  await assert.rejects(
+    () => service.startPreparation(other, item.id),
+    (error: unknown) =>
+      error instanceof DomainError && error.code === "STOCK_ITEM_NOT_FOUND",
+  );
+});
+test("sells a published vehicle, calculates gross margin and withdraws every publication", async () => {
+  const { repository, service, organizationId, siteId, assetId, customerId } =
+    fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 1000000,
+  });
+  await service.startPreparation(context, item.id);
+  await merchandise(service, item.id);
+  await service.markReady(context, item.id, 1500000);
+  await service.publish(context, item.id, "professional_website");
+  await service.publish(context, item.id, "central_marketplace");
+  const result = await service.sell(context, item.id, {
+    buyerCustomerId: customerId,
+    salePriceCents: 1450000,
+  });
+  assert.equal(result.sale.grossMarginCents, 450000);
+  assert.equal(repository.items[0]!.status, "sold");
+  assert.ok(
+    repository.publications.every((value) => value.status === "withdrawn"),
+  );
+  await assert.rejects(
+    () =>
+      service.sell(context, item.id, {
+        buyerCustomerId: customerId,
+        salePriceCents: 1450000,
+      }),
+    (error: unknown) =>
+      error instanceof DomainError && error.code === "STOCK_ITEM_NOT_SELLABLE",
+  );
+});
+test("serializes concurrent sales and records exactly one sale", async () => {
+  const { repository, service, organizationId, siteId, assetId, customerId } =
+    fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 1000000,
+  });
+  await service.startPreparation(context, item.id);
+  await merchandise(service, item.id);
+  await service.markReady(context, item.id, 1500000);
+  await service.publish(context, item.id, "professional_website");
+  const results = await Promise.allSettled([
+    service.sell(context, item.id, {
+      buyerCustomerId: customerId,
+      salePriceCents: 1450000,
+    }),
+    service.sell(context, item.id, {
+      buyerCustomerId: customerId,
+      salePriceCents: 1450000,
+    }),
+  ]);
+  assert.equal(
+    results.filter((result) => result.status === "fulfilled").length,
+    1,
+  );
+  assert.equal(repository.sales.length, 1);
+});
+test("schedules and completes an auditable vehicle handover", async () => {
+  const { repository, service, organizationId, siteId, assetId, customerId } =
+    fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 1000000,
+  });
+  await service.startPreparation(context, item.id);
+  await merchandise(service, item.id);
+  await service.markReady(context, item.id, 1500000);
+  await service.publish(context, item.id, "professional_website");
+  await service.sell(context, item.id, {
+    buyerCustomerId: customerId,
+    salePriceCents: 1450000,
+  });
+  const delivery = await service.scheduleDelivery(
+    context,
+    item.id,
+    "2026-07-24T09:00:00+02:00",
+  );
+  assert.equal(delivery.status, "scheduled");
+  const result = await service.completeDelivery(context, item.id, {
+    handoverOdometerKm: 41200,
+    notes: "  Remis avec deux clés  ",
+  });
+  assert.equal(result.stockItem.status, "delivered");
+  assert.equal(result.delivery.notes, "Remis avec deux clés");
+  assert.equal(repository.deliveries[0]!.status, "completed");
+  await assert.rejects(
+    () =>
+      service.completeDelivery(context, item.id, { handoverOdometerKm: 41200 }),
+    (error: unknown) =>
+      error instanceof DomainError &&
+      error.code === "STOCK_ITEM_NOT_DELIVERABLE",
+  );
+});
+test("allows only one delivery schedule under concurrency", async () => {
+  const { repository, service, organizationId, siteId, assetId, customerId } =
+    fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 1000000,
+  });
+  await service.startPreparation(context, item.id);
+  await merchandise(service, item.id);
+  await service.markReady(context, item.id, 1500000);
+  await service.publish(context, item.id, "professional_website");
+  await service.sell(context, item.id, {
+    buyerCustomerId: customerId,
+    salePriceCents: 1450000,
+  });
+  const results = await Promise.allSettled([
+    service.scheduleDelivery(context, item.id, "2026-07-24T09:00:00Z"),
+    service.scheduleDelivery(context, item.id, "2026-07-25T09:00:00Z"),
+  ]);
+  assert.equal(
+    results.filter((result) => result.status === "fulfilled").length,
+    1,
+  );
+  assert.equal(repository.deliveries.length, 1);
+});
+test("transfers asset ownership with documentary evidence after delivery", async () => {
+  const {
+    repository,
+    service,
+    organizationId,
+    siteId,
+    assetId,
+    customerId,
+    sellerCustomerId,
+    documentId,
+  } = fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 1000000,
+  });
+  await service.startPreparation(context, item.id);
+  await merchandise(service, item.id);
+  await service.markReady(context, item.id, 1500000);
+  await service.publish(context, item.id, "professional_website");
+  await service.sell(context, item.id, {
+    buyerCustomerId: customerId,
+    salePriceCents: 1450000,
+  });
+  await service.scheduleDelivery(context, item.id, "2026-07-24T09:00:00Z");
+  await service.completeDelivery(context, item.id, {
+    handoverOdometerKm: 41200,
+  });
+  const transfer = await service.transferOwnership(context, item.id, [
+    documentId,
+    documentId,
+  ]);
+  assert.equal(transfer.previousOwnerCustomerId, sellerCustomerId);
+  assert.equal(transfer.newOwnerCustomerId, customerId);
+  assert.equal(transfer.documentIds.length, 1);
+  assert.equal(
+    repository.assetOwners.get(`${context.tenantId}:${assetId}`),
+    customerId,
+  );
+  assert.equal(repository.transfers.length, 1);
+  await assert.rejects(
+    () => service.transferOwnership(context, item.id, [documentId]),
+    (error: unknown) =>
+      error instanceof DomainError &&
+      error.code === "OWNERSHIP_ALREADY_TRANSFERRED",
+  );
+});
+test("rejects ownership transfer before delivery or without vehicle evidence", async () => {
+  const { service, organizationId, siteId, assetId, customerId, documentId } =
+    fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 1000000,
+  });
+  await service.startPreparation(context, item.id);
+  await merchandise(service, item.id);
+  await service.markReady(context, item.id, 1500000);
+  await service.publish(context, item.id, "professional_website");
+  await service.sell(context, item.id, {
+    buyerCustomerId: customerId,
+    salePriceCents: 1450000,
+  });
+  await assert.rejects(
+    () => service.transferOwnership(context, item.id, [documentId]),
+    (error: unknown) =>
+      error instanceof DomainError && error.code === "STOCK_ITEM_NOT_DELIVERED",
+  );
+  await service.scheduleDelivery(context, item.id, "2026-07-24T09:00:00Z");
+  await service.completeDelivery(context, item.id, {
+    handoverOdometerKm: 41200,
+  });
+  await assert.rejects(
+    () => service.transferOwnership(context, item.id, []),
+    (error: unknown) =>
+      error instanceof DomainError &&
+      error.code === "TRANSFER_DOCUMENT_REQUIRED",
+  );
+  await assert.rejects(
+    () => service.transferOwnership(context, item.id, [newEntityId()]),
+    (error: unknown) =>
+      error instanceof DomainError &&
+      error.code === "INVALID_TRANSFER_DOCUMENT",
+  );
+});
+test("issues one cession dossier with buyer-owned document kinds after ownership transfer", async () => {
+  const {
+    repository,
+    service,
+    organizationId,
+    siteId,
+    assetId,
+    customerId,
+    sellerCustomerId,
+    documentId,
+    certificateDocumentId,
+    deliveryReceiptDocumentId,
+  } = fixture();
+  const item = await service.acquire(context, {
+    organizationId,
+    siteId,
+    assetId,
+    acquisitionMode: "purchase",
+    acquisitionCostCents: 1000000,
+  });
+  await service.startPreparation(context, item.id);
+  await merchandise(service, item.id);
+  await service.markReady(context, item.id, 1500000);
+  await service.publish(context, item.id, "professional_website");
+  await service.sell(context, item.id, {
+    buyerCustomerId: customerId,
+    salePriceCents: 1450000,
+  });
+  await service.scheduleDelivery(context, item.id, "2026-07-24T09:00:00Z");
+  await service.completeDelivery(context, item.id, {
+    handoverOdometerKm: 41200,
+  });
+  await assert.rejects(
+    () =>
+      service.issueCessionDossier(context, item.id, {
+        certificateDocumentId,
+        deliveryReceiptDocumentId,
+      }),
+    (error: unknown) =>
+      error instanceof DomainError &&
+      error.code === "OWNERSHIP_TRANSFER_REQUIRED",
+  );
+  await service.transferOwnership(context, item.id, [documentId]);
+  const receiptKey = `${context.tenantId}:${assetId}:${deliveryReceiptDocumentId}`;
+  repository.documentOwners.set(receiptKey, sellerCustomerId);
+  await assert.rejects(
+    () =>
+      service.issueCessionDossier(context, item.id, {
+        certificateDocumentId,
+        deliveryReceiptDocumentId,
+      }),
+    (error: unknown) =>
+      error instanceof DomainError &&
+      error.code === "INVALID_CESSION_DOCUMENTS",
+  );
+  repository.documentOwners.set(receiptKey, customerId);
+  const results = await Promise.allSettled([
+    service.issueCessionDossier(context, item.id, {
+      certificateDocumentId,
+      deliveryReceiptDocumentId,
+    }),
+    service.issueCessionDossier(context, item.id, {
+      certificateDocumentId,
+      deliveryReceiptDocumentId,
+    }),
+  ]);
+  assert.equal(
+    results.filter((result) => result.status === "fulfilled").length,
+    1,
+  );
+  const rejected = results.find((result) => result.status === "rejected");
+  assert.ok(
+    rejected?.status === "rejected" &&
+      rejected.reason instanceof DomainError &&
+      rejected.reason.code === "CESSION_DOSSIER_ALREADY_ISSUED",
+  );
+  assert.equal(repository.cessionDossiers[0]!.customerId, customerId);
+  assert.equal(repository.cessionDossiers.length, 1);
+  await assert.rejects(
+    () =>
+      service.issueCessionDossier(context, item.id, {
+        certificateDocumentId,
+        deliveryReceiptDocumentId: certificateDocumentId,
+      }),
+    (error: unknown) =>
+      error instanceof DomainError &&
+      error.code === "CESSION_DOCUMENTS_MUST_DIFFER",
+  );
+});

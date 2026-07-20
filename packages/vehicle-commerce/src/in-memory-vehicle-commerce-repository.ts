@@ -1,44 +1,502 @@
 import type { EntityId, TenantId } from "../../core/src/identity.ts";
 import { DomainError } from "../../core/src/errors.ts";
-import type { VehicleAuctionBidProps, VehicleAuctionProps, VehicleCessionDossierProps, VehicleCommerceRepository, VehicleDeliveryProps, VehicleFlashSaleProps, VehicleMediaProps, VehicleOwnershipTransferProps, VehiclePreparationCheckProps, VehiclePublicationProps, VehicleSaleProps, VehicleStockItemProps } from "./vehicle-commerce.ts";
+import type {
+  VehicleAuctionBidProps,
+  VehicleAuctionGuaranteeProps,
+  VehicleAuctionProps,
+  VehicleCessionDossierProps,
+  VehicleCommerceRepository,
+  VehicleDeliveryProps,
+  VehicleFlashSaleProps,
+  VehicleMediaProps,
+  VehicleOwnershipTransferProps,
+  VehiclePreparationCheckProps,
+  VehiclePublicationProps,
+  VehicleSaleProps,
+  VehicleStockItemProps,
+} from "./vehicle-commerce.ts";
 
-export class InMemoryVehicleCommerceRepository implements VehicleCommerceRepository {
-  assets=new Set<string>(); assetOwners=new Map<string,EntityId>();documents=new Set<string>();documentKinds=new Map<string,string>();documentOwners=new Map<string,EntityId>();customers=new Set<string>();sites=new Map<string,EntityId>();items:VehicleStockItemProps[]=[];publications:VehiclePublicationProps[]=[];checks:VehiclePreparationCheckProps[]=[];media:VehicleMediaProps[]=[];sales:VehicleSaleProps[]=[];deliveries:VehicleDeliveryProps[]=[];transfers:VehicleOwnershipTransferProps[]=[];cessionDossiers:VehicleCessionDossierProps[]=[];flashSales:VehicleFlashSaleProps[]=[];auctions:VehicleAuctionProps[]=[];auctionBids:VehicleAuctionBidProps[]=[];
-  private readonly locks=new Map<string,Promise<void>>();
-  async assetExists(tenantId:TenantId,assetId:EntityId){return this.assets.has(`${tenantId}:${assetId}`);}
-  async siteBelongsToOrganization(tenantId:TenantId,organizationId:EntityId,siteId:EntityId){return this.sites.get(`${tenantId}:${siteId}`)===organizationId;}
-  async customerExists(tenantId:TenantId,customerId:EntityId){return this.customers.has(`${tenantId}:${customerId}`);}
-  async findSale(tenantId:TenantId,stockItemId:EntityId){return this.sales.find(value=>value.tenantId===tenantId&&value.stockItemId===stockItemId)??null;}
-  async findDelivery(tenantId:TenantId,stockItemId:EntityId){return this.deliveries.find(value=>value.tenantId===tenantId&&value.stockItemId===stockItemId)??null;}
-  async assetOwnerCustomerId(tenantId:TenantId,assetId:EntityId){return this.assetOwners.get(`${tenantId}:${assetId}`)??null;}
-  async documentsBelongToAsset(tenantId:TenantId,assetId:EntityId,documentIds:readonly EntityId[]){return documentIds.every(id=>this.documents.has(`${tenantId}:${assetId}:${id}`));}
-  async documentsMatchKinds(tenantId:TenantId,assetId:EntityId,ownerCustomerId:EntityId,documents:Readonly<Record<EntityId,string>>){return Object.entries(documents).every(([id,kind])=>{const key=`${tenantId}:${assetId}:${id}`;return this.documentKinds.get(key)===kind&&this.documentOwners.get(key)===ownerCustomerId;});}
-  async findOwnershipTransfer(tenantId:TenantId,stockItemId:EntityId){return this.transfers.find(value=>value.tenantId===tenantId&&value.stockItemId===stockItemId)??null;}
-  async findCessionDossier(tenantId:TenantId,stockItemId:EntityId){return this.cessionDossiers.find(value=>value.tenantId===tenantId&&value.stockItemId===stockItemId)??null;}
-  async findOpenFlashSale(tenantId:TenantId,stockItemId:EntityId,at:string){return this.flashSales.find(value=>value.tenantId===tenantId&&value.stockItemId===stockItemId&&value.status==="scheduled"&&value.endsAt>at)??null;}
-  async findLatestFlashSale(tenantId:TenantId,stockItemId:EntityId){return [...this.flashSales].reverse().find(value=>value.tenantId===tenantId&&value.stockItemId===stockItemId)??null;}
-  async expireFlashSales(tenantId:TenantId,stockItemId:EntityId,at:string){this.flashSales=this.flashSales.map(value=>value.tenantId===tenantId&&value.stockItemId===stockItemId&&value.status==="scheduled"&&value.endsAt<=at?{...value,status:"expired",closedReason:"expired",closedAt:at}:value);}
-  async findOpenAuction(tenantId:TenantId,stockItemId:EntityId){return this.auctions.find(value=>value.tenantId===tenantId&&value.stockItemId===stockItemId&&value.status==="scheduled")??null;}
-  async listAuctionBids(tenantId:TenantId,auctionId:EntityId){return this.auctionBids.filter(value=>value.tenantId===tenantId&&value.auctionId===auctionId);}
-  async saveStockItem(value:VehicleStockItemProps){this.items=this.items.filter(item=>item.id!==value.id);this.items.push(value);}
-  async findStockItem(tenantId:TenantId,id:EntityId){return this.items.find(item=>item.tenantId===tenantId&&item.id===id)??null;}
-  async listPublications(tenantId:TenantId,stockItemId:EntityId){return this.publications.filter(item=>item.tenantId===tenantId&&item.stockItemId===stockItemId);}
-  async savePreparationCheck(value:VehiclePreparationCheckProps){this.checks=this.checks.filter(item=>item.id!==value.id);this.checks.push(value);}
-  async listPreparationChecks(tenantId:TenantId,stockItemId:EntityId){return this.checks.filter(item=>item.tenantId===tenantId&&item.stockItemId===stockItemId);}
-  async saveMedia(value:VehicleMediaProps){this.media.push(value);}
-  async listMedia(tenantId:TenantId,stockItemId:EntityId){return this.media.filter(item=>item.tenantId===tenantId&&item.stockItemId===stockItemId);}
-  async withStockItemLock<T>(tenantId:TenantId,id:EntityId,operation:(repository:VehicleCommerceRepository)=>Promise<T>):Promise<T>{const key=`${tenantId}:${id}`,previous=this.locks.get(key)??Promise.resolve();let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});const tail=previous.then(()=>gate);this.locks.set(key,tail);await previous;try{return await operation(this);}finally{release();if(this.locks.get(key)===tail)this.locks.delete(key);}}
-  async publish(value:VehiclePublicationProps,stockItem:VehicleStockItemProps){const snapshot={items:[...this.items],publications:[...this.publications]};try{await this.saveStockItem(stockItem);this.publications.push(value);}catch(error){this.items=snapshot.items;this.publications=snapshot.publications;throw error;}}
-  async markReady(stockItem:VehicleStockItemProps,_readyBy:EntityId){await this.saveStockItem(stockItem);}
-  async sell(value:VehicleSaleProps,stockItem:VehicleStockItemProps){const snapshot={items:[...this.items],publications:[...this.publications],sales:[...this.sales],flashSales:[...this.flashSales],auctions:[...this.auctions]};try{await this.saveStockItem(stockItem);this.publications=this.publications.map(item=>item.stockItemId===stockItem.id&&item.status==="published"?{...item,status:"withdrawn"}:item);this.flashSales=this.flashSales.map(item=>item.stockItemId===stockItem.id&&item.status==="scheduled"?{...item,status:"closed",closedReason:"sold",closedBy:value.soldBy,closedAt:value.soldAt}:item);this.auctions=this.auctions.map(item=>item.stockItemId===stockItem.id&&item.status==="scheduled"?{...item,status:"cancelled",closedReason:"direct_sale",closedBy:value.soldBy,closedAt:value.soldAt}:item);this.sales.push(value);}catch(error){this.items=snapshot.items;this.publications=snapshot.publications;this.sales=snapshot.sales;this.flashSales=snapshot.flashSales;this.auctions=snapshot.auctions;throw error;}}
-  async saveDelivery(value:VehicleDeliveryProps){this.deliveries.push(value);}
-  async completeDelivery(value:VehicleDeliveryProps,stockItem:VehicleStockItemProps){await this.saveStockItem(stockItem);this.deliveries=this.deliveries.map(item=>item.id===value.id?value:item);}
-  async transferOwnership(value:VehicleOwnershipTransferProps){this.assetOwners.set(`${value.tenantId}:${value.assetId}`,value.newOwnerCustomerId);this.transfers.push(value);}
-  async issueCessionDossier(value:VehicleCessionDossierProps){if(this.cessionDossiers.some(item=>item.tenantId===value.tenantId&&item.stockItemId===value.stockItemId))throw new DomainError("CESSION_DOSSIER_ALREADY_ISSUED","Cession dossier is already issued");this.cessionDossiers.push(value);}
-  async scheduleFlashSale(value:VehicleFlashSaleProps){if(await this.findOpenFlashSale(value.tenantId,value.stockItemId,value.createdAt))throw new DomainError("FLASH_SALE_ALREADY_OPEN","An open flash sale already exists for this vehicle");this.flashSales.push(value);}
-  async cancelFlashSale(value:VehicleFlashSaleProps){this.flashSales=this.flashSales.map(current=>current.id===value.id?value:current);}
-  async withdrawStock(stockItem:VehicleStockItemProps,withdrawnBy:EntityId){await this.saveStockItem(stockItem);this.publications=this.publications.map(item=>item.stockItemId===stockItem.id&&item.status==="published"?{...item,status:"withdrawn"}:item);this.flashSales=this.flashSales.map(item=>item.stockItemId===stockItem.id&&item.status==="scheduled"?{...item,status:"closed",closedReason:"withdrawn",closedBy:withdrawnBy,closedAt:stockItem.updatedAt}:item);this.auctions=this.auctions.map(item=>item.stockItemId===stockItem.id&&item.status==="scheduled"?{...item,status:"cancelled",closedReason:"withdrawn",closedBy:withdrawnBy,closedAt:stockItem.updatedAt}:item);}
-  async scheduleAuction(value:VehicleAuctionProps){if(await this.findOpenAuction(value.tenantId,value.stockItemId))throw new DomainError("AUCTION_ALREADY_OPEN","An open auction already exists for this vehicle");this.auctions.push(value);}
-  async placeAuctionBid(value:VehicleAuctionBidProps){this.auctionBids.push(value);}
-  async closeAuction(value:VehicleAuctionProps,sale?:VehicleSaleProps,stockItem?:VehicleStockItemProps){this.auctions=this.auctions.map(current=>current.id===value.id?value:current);if(sale&&stockItem){await this.saveStockItem(stockItem);this.sales.push(sale);this.publications=this.publications.map(item=>item.stockItemId===stockItem.id&&item.status==="published"?{...item,status:"withdrawn"}:item);this.flashSales=this.flashSales.map(item=>item.stockItemId===stockItem.id&&item.status==="scheduled"?{...item,status:"closed",closedReason:"sold",closedBy:sale.soldBy,closedAt:sale.soldAt}:item);}}
+export class InMemoryVehicleCommerceRepository
+  implements VehicleCommerceRepository
+{
+  assets = new Set<string>();
+  assetOwners = new Map<string, EntityId>();
+  documents = new Set<string>();
+  documentKinds = new Map<string, string>();
+  documentOwners = new Map<string, EntityId>();
+  customers = new Set<string>();
+  sites = new Map<string, EntityId>();
+  items: VehicleStockItemProps[] = [];
+  publications: VehiclePublicationProps[] = [];
+  checks: VehiclePreparationCheckProps[] = [];
+  media: VehicleMediaProps[] = [];
+  sales: VehicleSaleProps[] = [];
+  deliveries: VehicleDeliveryProps[] = [];
+  transfers: VehicleOwnershipTransferProps[] = [];
+  cessionDossiers: VehicleCessionDossierProps[] = [];
+  flashSales: VehicleFlashSaleProps[] = [];
+  auctions: VehicleAuctionProps[] = [];
+  auctionGuarantees: VehicleAuctionGuaranteeProps[] = [];
+  auctionBids: VehicleAuctionBidProps[] = [];
+  private readonly locks = new Map<string, Promise<void>>();
+  async assetExists(tenantId: TenantId, assetId: EntityId) {
+    return this.assets.has(`${tenantId}:${assetId}`);
+  }
+  async siteBelongsToOrganization(
+    tenantId: TenantId,
+    organizationId: EntityId,
+    siteId: EntityId,
+  ) {
+    return this.sites.get(`${tenantId}:${siteId}`) === organizationId;
+  }
+  async customerExists(tenantId: TenantId, customerId: EntityId) {
+    return this.customers.has(`${tenantId}:${customerId}`);
+  }
+  async findSale(tenantId: TenantId, stockItemId: EntityId) {
+    return (
+      this.sales.find(
+        (value) =>
+          value.tenantId === tenantId && value.stockItemId === stockItemId,
+      ) ?? null
+    );
+  }
+  async findDelivery(tenantId: TenantId, stockItemId: EntityId) {
+    return (
+      this.deliveries.find(
+        (value) =>
+          value.tenantId === tenantId && value.stockItemId === stockItemId,
+      ) ?? null
+    );
+  }
+  async assetOwnerCustomerId(tenantId: TenantId, assetId: EntityId) {
+    return this.assetOwners.get(`${tenantId}:${assetId}`) ?? null;
+  }
+  async documentsBelongToAsset(
+    tenantId: TenantId,
+    assetId: EntityId,
+    documentIds: readonly EntityId[],
+  ) {
+    return documentIds.every((id) =>
+      this.documents.has(`${tenantId}:${assetId}:${id}`),
+    );
+  }
+  async documentsMatchKinds(
+    tenantId: TenantId,
+    assetId: EntityId,
+    ownerCustomerId: EntityId,
+    documents: Readonly<Record<EntityId, string>>,
+  ) {
+    return Object.entries(documents).every(([id, kind]) => {
+      const key = `${tenantId}:${assetId}:${id}`;
+      return (
+        this.documentKinds.get(key) === kind &&
+        this.documentOwners.get(key) === ownerCustomerId
+      );
+    });
+  }
+  async findOwnershipTransfer(tenantId: TenantId, stockItemId: EntityId) {
+    return (
+      this.transfers.find(
+        (value) =>
+          value.tenantId === tenantId && value.stockItemId === stockItemId,
+      ) ?? null
+    );
+  }
+  async findCessionDossier(tenantId: TenantId, stockItemId: EntityId) {
+    return (
+      this.cessionDossiers.find(
+        (value) =>
+          value.tenantId === tenantId && value.stockItemId === stockItemId,
+      ) ?? null
+    );
+  }
+  async findOpenFlashSale(
+    tenantId: TenantId,
+    stockItemId: EntityId,
+    at: string,
+  ) {
+    return (
+      this.flashSales.find(
+        (value) =>
+          value.tenantId === tenantId &&
+          value.stockItemId === stockItemId &&
+          value.status === "scheduled" &&
+          value.endsAt > at,
+      ) ?? null
+    );
+  }
+  async findLatestFlashSale(tenantId: TenantId, stockItemId: EntityId) {
+    return (
+      [...this.flashSales]
+        .reverse()
+        .find(
+          (value) =>
+            value.tenantId === tenantId && value.stockItemId === stockItemId,
+        ) ?? null
+    );
+  }
+  async expireFlashSales(
+    tenantId: TenantId,
+    stockItemId: EntityId,
+    at: string,
+  ) {
+    this.flashSales = this.flashSales.map((value) =>
+      value.tenantId === tenantId &&
+      value.stockItemId === stockItemId &&
+      value.status === "scheduled" &&
+      value.endsAt <= at
+        ? { ...value, status: "expired", closedReason: "expired", closedAt: at }
+        : value,
+    );
+  }
+  async findOpenAuction(tenantId: TenantId, stockItemId: EntityId) {
+    return (
+      this.auctions.find(
+        (value) =>
+          value.tenantId === tenantId &&
+          value.stockItemId === stockItemId &&
+          value.status === "scheduled",
+      ) ?? null
+    );
+  }
+  async listAuctionBids(tenantId: TenantId, auctionId: EntityId) {
+    return this.auctionBids.filter(
+      (value) => value.tenantId === tenantId && value.auctionId === auctionId,
+    );
+  }
+  async findAuctionGuarantee(
+    tenantId: TenantId,
+    auctionId: EntityId,
+    bidderCustomerId: EntityId,
+  ) {
+    return (
+      this.auctionGuarantees.find(
+        (value) =>
+          value.tenantId === tenantId &&
+          value.auctionId === auctionId &&
+          value.bidderCustomerId === bidderCustomerId,
+      ) ?? null
+    );
+  }
+  async saveStockItem(value: VehicleStockItemProps) {
+    this.items = this.items.filter((item) => item.id !== value.id);
+    this.items.push(value);
+  }
+  async findStockItem(tenantId: TenantId, id: EntityId) {
+    return (
+      this.items.find((item) => item.tenantId === tenantId && item.id === id) ??
+      null
+    );
+  }
+  async listPublications(tenantId: TenantId, stockItemId: EntityId) {
+    return this.publications.filter(
+      (item) => item.tenantId === tenantId && item.stockItemId === stockItemId,
+    );
+  }
+  async savePreparationCheck(value: VehiclePreparationCheckProps) {
+    this.checks = this.checks.filter((item) => item.id !== value.id);
+    this.checks.push(value);
+  }
+  async listPreparationChecks(tenantId: TenantId, stockItemId: EntityId) {
+    return this.checks.filter(
+      (item) => item.tenantId === tenantId && item.stockItemId === stockItemId,
+    );
+  }
+  async saveMedia(value: VehicleMediaProps) {
+    this.media.push(value);
+  }
+  async listMedia(tenantId: TenantId, stockItemId: EntityId) {
+    return this.media.filter(
+      (item) => item.tenantId === tenantId && item.stockItemId === stockItemId,
+    );
+  }
+  async withStockItemLock<T>(
+    tenantId: TenantId,
+    id: EntityId,
+    operation: (repository: VehicleCommerceRepository) => Promise<T>,
+  ): Promise<T> {
+    const key = `${tenantId}:${id}`,
+      previous = this.locks.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => gate);
+    this.locks.set(key, tail);
+    await previous;
+    try {
+      return await operation(this);
+    } finally {
+      release();
+      if (this.locks.get(key) === tail) this.locks.delete(key);
+    }
+  }
+  async publish(
+    value: VehiclePublicationProps,
+    stockItem: VehicleStockItemProps,
+  ) {
+    const snapshot = {
+      items: [...this.items],
+      publications: [...this.publications],
+    };
+    try {
+      await this.saveStockItem(stockItem);
+      this.publications.push(value);
+    } catch (error) {
+      this.items = snapshot.items;
+      this.publications = snapshot.publications;
+      throw error;
+    }
+  }
+  async markReady(stockItem: VehicleStockItemProps, _readyBy: EntityId) {
+    await this.saveStockItem(stockItem);
+  }
+  async sell(value: VehicleSaleProps, stockItem: VehicleStockItemProps) {
+    const snapshot = {
+      items: [...this.items],
+      publications: [...this.publications],
+      sales: [...this.sales],
+      flashSales: [...this.flashSales],
+      auctions: [...this.auctions],
+      auctionGuarantees: [...this.auctionGuarantees],
+    };
+    try {
+      await this.saveStockItem(stockItem);
+      this.publications = this.publications.map((item) =>
+        item.stockItemId === stockItem.id && item.status === "published"
+          ? { ...item, status: "withdrawn" }
+          : item,
+      );
+      this.flashSales = this.flashSales.map((item) =>
+        item.stockItemId === stockItem.id && item.status === "scheduled"
+          ? {
+              ...item,
+              status: "closed",
+              closedReason: "sold",
+              closedBy: value.soldBy,
+              closedAt: value.soldAt,
+            }
+          : item,
+      );
+      this.auctions = this.auctions.map((item) =>
+        item.stockItemId === stockItem.id && item.status === "scheduled"
+          ? {
+              ...item,
+              status: "cancelled",
+              closedReason: "direct_sale",
+              closedBy: value.soldBy,
+              closedAt: value.soldAt,
+            }
+          : item,
+      );
+      this.auctionGuarantees = this.auctionGuarantees.map((item) =>
+        item.stockItemId === stockItem.id && item.status === "authorized"
+          ? {
+              ...item,
+              status: "released",
+              closedReason: "direct_sale",
+              closedAt: value.soldAt,
+            }
+          : item,
+      );
+      this.sales.push(value);
+    } catch (error) {
+      this.items = snapshot.items;
+      this.publications = snapshot.publications;
+      this.sales = snapshot.sales;
+      this.flashSales = snapshot.flashSales;
+      this.auctions = snapshot.auctions;
+      this.auctionGuarantees = snapshot.auctionGuarantees;
+      throw error;
+    }
+  }
+  async saveDelivery(value: VehicleDeliveryProps) {
+    this.deliveries.push(value);
+  }
+  async completeDelivery(
+    value: VehicleDeliveryProps,
+    stockItem: VehicleStockItemProps,
+  ) {
+    await this.saveStockItem(stockItem);
+    this.deliveries = this.deliveries.map((item) =>
+      item.id === value.id ? value : item,
+    );
+  }
+  async transferOwnership(value: VehicleOwnershipTransferProps) {
+    this.assetOwners.set(
+      `${value.tenantId}:${value.assetId}`,
+      value.newOwnerCustomerId,
+    );
+    this.transfers.push(value);
+  }
+  async issueCessionDossier(value: VehicleCessionDossierProps) {
+    if (
+      this.cessionDossiers.some(
+        (item) =>
+          item.tenantId === value.tenantId &&
+          item.stockItemId === value.stockItemId,
+      )
+    )
+      throw new DomainError(
+        "CESSION_DOSSIER_ALREADY_ISSUED",
+        "Cession dossier is already issued",
+      );
+    this.cessionDossiers.push(value);
+  }
+  async scheduleFlashSale(value: VehicleFlashSaleProps) {
+    if (
+      await this.findOpenFlashSale(
+        value.tenantId,
+        value.stockItemId,
+        value.createdAt,
+      )
+    )
+      throw new DomainError(
+        "FLASH_SALE_ALREADY_OPEN",
+        "An open flash sale already exists for this vehicle",
+      );
+    this.flashSales.push(value);
+  }
+  async cancelFlashSale(value: VehicleFlashSaleProps) {
+    this.flashSales = this.flashSales.map((current) =>
+      current.id === value.id ? value : current,
+    );
+  }
+  async withdrawStock(stockItem: VehicleStockItemProps, withdrawnBy: EntityId) {
+    await this.saveStockItem(stockItem);
+    this.publications = this.publications.map((item) =>
+      item.stockItemId === stockItem.id && item.status === "published"
+        ? { ...item, status: "withdrawn" }
+        : item,
+    );
+    this.flashSales = this.flashSales.map((item) =>
+      item.stockItemId === stockItem.id && item.status === "scheduled"
+        ? {
+            ...item,
+            status: "closed",
+            closedReason: "withdrawn",
+            closedBy: withdrawnBy,
+            closedAt: stockItem.updatedAt,
+          }
+        : item,
+    );
+    this.auctions = this.auctions.map((item) =>
+      item.stockItemId === stockItem.id && item.status === "scheduled"
+        ? {
+            ...item,
+            status: "cancelled",
+            closedReason: "withdrawn",
+            closedBy: withdrawnBy,
+            closedAt: stockItem.updatedAt,
+          }
+        : item,
+    );
+    this.auctionGuarantees = this.auctionGuarantees.map((item) =>
+      item.stockItemId === stockItem.id && item.status === "authorized"
+        ? {
+            ...item,
+            status: "released",
+            closedReason: "withdrawn",
+            closedAt: stockItem.updatedAt,
+          }
+        : item,
+    );
+  }
+  async scheduleAuction(value: VehicleAuctionProps) {
+    if (await this.findOpenAuction(value.tenantId, value.stockItemId))
+      throw new DomainError(
+        "AUCTION_ALREADY_OPEN",
+        "An open auction already exists for this vehicle",
+      );
+    this.auctions.push(value);
+  }
+  async authorizeAuctionGuarantee(value: VehicleAuctionGuaranteeProps) {
+    const byKey = this.auctionGuarantees.find(
+      (current) =>
+        current.tenantId === value.tenantId &&
+        current.idempotencyKey === value.idempotencyKey,
+    );
+    if (byKey) {
+      const canonicalMatch =
+        byKey.organizationId === value.organizationId &&
+        byKey.siteId === value.siteId &&
+        byKey.stockItemId === value.stockItemId &&
+        byKey.auctionId === value.auctionId &&
+        byKey.bidderCustomerId === value.bidderCustomerId &&
+        byKey.provider === value.provider &&
+        byKey.providerReference === value.providerReference &&
+        byKey.amountCents === value.amountCents &&
+        byKey.currency === value.currency;
+      if (!canonicalMatch)
+        throw new DomainError(
+          "AUCTION_GUARANTEE_IDEMPOTENCY_CONFLICT",
+          "Idempotency key was already used with a different guarantee request",
+        );
+      return byKey;
+    }
+    if (
+      this.auctionGuarantees.some(
+        (current) =>
+          current.tenantId === value.tenantId &&
+          current.auctionId === value.auctionId &&
+          current.bidderCustomerId === value.bidderCustomerId &&
+          current.status === "authorized",
+      )
+    )
+      throw new DomainError(
+        "AUCTION_GUARANTEE_ALREADY_AUTHORIZED",
+        "An active guarantee already exists for this bidder",
+      );
+    this.auctionGuarantees.push(value);
+    return value;
+  }
+  async placeAuctionBid(value: VehicleAuctionBidProps) {
+    this.auctionBids.push(value);
+  }
+  async closeAuction(
+    value: VehicleAuctionProps,
+    sale?: VehicleSaleProps,
+    stockItem?: VehicleStockItemProps,
+  ) {
+    this.auctions = this.auctions.map((current) =>
+      current.id === value.id ? value : current,
+    );
+    this.auctionGuarantees = this.auctionGuarantees.map((item) => {
+      if (item.auctionId !== value.id || item.status !== "authorized")
+        return item;
+      if (sale && item.bidderCustomerId === sale.buyerCustomerId)
+        return {
+          ...item,
+          status: "captured",
+          closedReason: "winner",
+          closedAt: value.closedAt,
+        };
+      return {
+        ...item,
+        status: "released",
+        closedReason: sale ? "lost" : "unsold",
+        closedAt: value.closedAt,
+      };
+    });
+    if (sale && stockItem) {
+      await this.saveStockItem(stockItem);
+      this.sales.push(sale);
+      this.publications = this.publications.map((item) =>
+        item.stockItemId === stockItem.id && item.status === "published"
+          ? { ...item, status: "withdrawn" }
+          : item,
+      );
+      this.flashSales = this.flashSales.map((item) =>
+        item.stockItemId === stockItem.id && item.status === "scheduled"
+          ? {
+              ...item,
+              status: "closed",
+              closedReason: "sold",
+              closedBy: sale.soldBy,
+              closedAt: sale.soldAt,
+            }
+          : item,
+      );
+    }
+  }
 }
