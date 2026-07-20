@@ -133,6 +133,12 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM outbox_events WHERE tenant_id=$1 AND event_type='commerce.vehicle_flash_sale_scheduled.v1' AND payload->>'stockItemId'=$2",[t1,stockItem.id])).rows[0].count,1);
     await commerce.cancelFlashSale(context,stockItem.id);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_flash_sales WHERE tenant_id=$1 AND stock_item_id=$2 AND status='cancelled'",[t1,stockItem.id])).rows[0].count,1);
+    await commerce.scheduleFlashSale(context,stockItem.id,{priceCents:1480000,startsAt:"2026-07-22T11:00:00Z",endsAt:"2026-07-22T12:00:00Z",channels:["central_marketplace"]});
+    const laterCommerce=new ManageVehicleCommerce(commerceRepository,()=>new Date("2026-07-22T13:00:00Z"));
+    await laterCommerce.scheduleFlashSale(context,stockItem.id,{priceCents:1470000,startsAt:"2026-07-22T14:00:00Z",endsAt:"2026-07-22T15:00:00Z",channels:["central_marketplace"]});
+    assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_flash_sales WHERE tenant_id=$1 AND stock_item_id=$2 AND status='expired' AND closed_reason='expired'",[t1,stockItem.id])).rows[0].count,1);
+    assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_flash_sales WHERE tenant_id=$1 AND stock_item_id=$2",[t1,stockItem.id])).rows[0].count,3);
+    assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM outbox_events WHERE tenant_id=$1 AND event_type='commerce.vehicle_flash_sale_expired.v1' AND payload->>'stockItemId'=$2",[t1,stockItem.id])).rows[0].count,1);
     const saleResults=await Promise.allSettled([
       commerce.sell(context,stockItem.id,{buyerCustomerId,salePriceCents:1500000}),
       commerce.sell(context,stockItem.id,{buyerCustomerId,salePriceCents:1500000})
@@ -142,6 +148,7 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     assert.equal((await adminPool.query("SELECT gross_margin_cents FROM vehicle_sales WHERE tenant_id=$1 AND stock_item_id=$2",[t1,stockItem.id])).rows[0].gross_margin_cents,300000);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_publications WHERE tenant_id=$1 AND stock_item_id=$2 AND status='published'",[t1,stockItem.id])).rows[0].count,0);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM outbox_events WHERE tenant_id=$1 AND event_type='commerce.vehicle_sold.v1' AND payload->>'stockItemId'=$2",[t1,stockItem.id])).rows[0].count,1);
+    assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_flash_sales WHERE tenant_id=$1 AND stock_item_id=$2 AND status='closed' AND closed_reason='sold'",[t1,stockItem.id])).rows[0].count,1);
     const deliveryResults=await Promise.allSettled([
       commerce.scheduleDelivery(context,stockItem.id,"2026-07-24T09:00:00Z"),
       commerce.scheduleDelivery(context,stockItem.id,"2026-07-25T09:00:00Z")
