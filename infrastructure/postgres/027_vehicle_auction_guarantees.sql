@@ -2,10 +2,6 @@ ALTER TABLE vehicle_auctions
   ADD COLUMN guarantee_amount_cents integer NOT NULL DEFAULT 50000 CHECK(guarantee_amount_cents>0),
   ADD COLUMN currency character(3) NOT NULL DEFAULT 'EUR' CHECK(currency~'^[A-Z]{3}$');
 
-ALTER TABLE vehicle_auctions
-  ALTER COLUMN guarantee_amount_cents DROP DEFAULT,
-  ALTER COLUMN currency DROP DEFAULT;
-
 CREATE TABLE vehicle_auction_guarantees(
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id),
