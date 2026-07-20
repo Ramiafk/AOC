@@ -58,7 +58,8 @@ Le découpage complet est dans `docs/DELIVERY_LOTS.md` et les décisions dans `d
 - Lot 5C : vente véhicule, calcul de marge et retrait atomique des annonces — terminé.
 - Lot 5D : planification de livraison et remise auditable du véhicule — terminé.
 - Lot 5E : transfert de propriété après remise, mutation du passeport et preuve documentaire — terminé.
-- Prochaine tranche : documents réglementaires de cession et notifications associées.
+- Lot 5F : dossier réglementaire de cession et demande de notification documentaire — terminé.
+- Prochaine tranche : ventes flash et enchères configurables.
 
 ### Base locale
 

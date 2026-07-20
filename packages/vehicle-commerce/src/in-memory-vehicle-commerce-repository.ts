@@ -1,8 +1,8 @@
 import type { EntityId, TenantId } from "../../core/src/identity.ts";
-import type { VehicleCommerceRepository, VehicleDeliveryProps, VehicleMediaProps, VehicleOwnershipTransferProps, VehiclePreparationCheckProps, VehiclePublicationProps, VehicleSaleProps, VehicleStockItemProps } from "./vehicle-commerce.ts";
+import type { VehicleCessionDossierProps, VehicleCommerceRepository, VehicleDeliveryProps, VehicleMediaProps, VehicleOwnershipTransferProps, VehiclePreparationCheckProps, VehiclePublicationProps, VehicleSaleProps, VehicleStockItemProps } from "./vehicle-commerce.ts";
 
 export class InMemoryVehicleCommerceRepository implements VehicleCommerceRepository {
-  assets=new Set<string>(); assetOwners=new Map<string,EntityId>();documents=new Set<string>();customers=new Set<string>();sites=new Map<string,EntityId>();items:VehicleStockItemProps[]=[];publications:VehiclePublicationProps[]=[];checks:VehiclePreparationCheckProps[]=[];media:VehicleMediaProps[]=[];sales:VehicleSaleProps[]=[];deliveries:VehicleDeliveryProps[]=[];transfers:VehicleOwnershipTransferProps[]=[];
+  assets=new Set<string>(); assetOwners=new Map<string,EntityId>();documents=new Set<string>();documentKinds=new Map<string,string>();customers=new Set<string>();sites=new Map<string,EntityId>();items:VehicleStockItemProps[]=[];publications:VehiclePublicationProps[]=[];checks:VehiclePreparationCheckProps[]=[];media:VehicleMediaProps[]=[];sales:VehicleSaleProps[]=[];deliveries:VehicleDeliveryProps[]=[];transfers:VehicleOwnershipTransferProps[]=[];cessionDossiers:VehicleCessionDossierProps[]=[];
   private readonly locks=new Map<string,Promise<void>>();
   async assetExists(tenantId:TenantId,assetId:EntityId){return this.assets.has(`${tenantId}:${assetId}`);}
   async siteBelongsToOrganization(tenantId:TenantId,organizationId:EntityId,siteId:EntityId){return this.sites.get(`${tenantId}:${siteId}`)===organizationId;}
@@ -11,6 +11,8 @@ export class InMemoryVehicleCommerceRepository implements VehicleCommerceReposit
   async findDelivery(tenantId:TenantId,stockItemId:EntityId){return this.deliveries.find(value=>value.tenantId===tenantId&&value.stockItemId===stockItemId)??null;}
   async assetOwnerCustomerId(tenantId:TenantId,assetId:EntityId){return this.assetOwners.get(`${tenantId}:${assetId}`)??null;}
   async documentsBelongToAsset(tenantId:TenantId,assetId:EntityId,documentIds:readonly EntityId[]){return documentIds.every(id=>this.documents.has(`${tenantId}:${assetId}:${id}`));}
+  async documentsMatchKinds(tenantId:TenantId,assetId:EntityId,documents:Readonly<Record<EntityId,string>>){return Object.entries(documents).every(([id,kind])=>this.documentKinds.get(`${tenantId}:${assetId}:${id}`)===kind);}
+  async findOwnershipTransfer(tenantId:TenantId,stockItemId:EntityId){return this.transfers.find(value=>value.tenantId===tenantId&&value.stockItemId===stockItemId)??null;}
   async saveStockItem(value:VehicleStockItemProps){this.items=this.items.filter(item=>item.id!==value.id);this.items.push(value);}
   async findStockItem(tenantId:TenantId,id:EntityId){return this.items.find(item=>item.tenantId===tenantId&&item.id===id)??null;}
   async listPublications(tenantId:TenantId,stockItemId:EntityId){return this.publications.filter(item=>item.tenantId===tenantId&&item.stockItemId===stockItemId);}
@@ -25,4 +27,5 @@ export class InMemoryVehicleCommerceRepository implements VehicleCommerceReposit
   async saveDelivery(value:VehicleDeliveryProps){this.deliveries.push(value);}
   async completeDelivery(value:VehicleDeliveryProps,stockItem:VehicleStockItemProps){await this.saveStockItem(stockItem);this.deliveries=this.deliveries.map(item=>item.id===value.id?value:item);}
   async transferOwnership(value:VehicleOwnershipTransferProps){this.assetOwners.set(`${value.tenantId}:${value.assetId}`,value.newOwnerCustomerId);this.transfers.push(value);}
+  async issueCessionDossier(value:VehicleCessionDossierProps){if(this.cessionDossiers.some(item=>item.tenantId===value.tenantId&&item.stockItemId===value.stockItemId))throw new Error("Cession dossier already exists");this.cessionDossiers.push(value);}
 }
