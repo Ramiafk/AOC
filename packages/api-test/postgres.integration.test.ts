@@ -185,8 +185,8 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     await assert.rejects(
       () =>
         adminPool.query(
-          `INSERT INTO vehicle_auction_guarantees(id,tenant_id,organization_id,site_id,auction_id,stock_item_id,bidder_customer_id,provider,provider_reference,idempotency_key,amount_cents,currency,status,authorized_at)
-           VALUES($1,$2,$3,$4,$5,$6,$7,'test_psp','wrong-scope','wrong-scope-key',$8,$9,'authorized',$10)`,
+          `INSERT INTO vehicle_auction_guarantees(id,tenant_id,organization_id,site_id,auction_id,stock_item_id,bidder_customer_id,provider,provider_reference,idempotency_key,amount_cents,currency,status,authorized_at,closed_at,closed_reason)
+           VALUES($1,$2,$3,$4,$5,$6,$7,'test_psp','wrong-scope','wrong-scope-key',$8,$9,'released',$10,$10,'unsold')`,
           [
             newEntityId(),
             t1,
