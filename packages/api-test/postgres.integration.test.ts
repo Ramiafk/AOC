@@ -59,16 +59,22 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     const otherOrganizationId=newEntityId();
     const otherSiteId=newEntityId();
     const customerId=newEntityId();
+    const buyerCustomerId=newEntityId();
     const assetId=newEntityId();
     const otherAssetId=newEntityId();
+    const passportId=newEntityId();
+    const transferDocumentId=newEntityId();
     await adminPool.query("INSERT INTO tenants(id,slug,display_name) VALUES($1,$3,$3),($2,$4,$4) ON CONFLICT DO NOTHING",[t1,t2,`inventory-${t1}`,`inventory-${t2}`]);
     await adminPool.query("INSERT INTO organizations(id,tenant_id,legal_name,display_name,country_code,activities,created_at) VALUES($1,$2,'Inventory','Inventory','FR',ARRAY['workshop'],now())",[organizationId,t1]);
     await adminPool.query("INSERT INTO organizations(id,tenant_id,legal_name,display_name,country_code,activities,created_at) VALUES($1,$2,'Other','Other','FR',ARRAY['dealer'],now())",[otherOrganizationId,t1]);
     await adminPool.query("INSERT INTO sites(id,tenant_id,organization_id,name,country_code,timezone,activities,created_at) VALUES($1,$2,$3,'Main','FR','Europe/Paris',ARRAY['workshop'],now())",[siteId,t1,organizationId]);
     await adminPool.query("INSERT INTO sites(id,tenant_id,organization_id,name,country_code,timezone,activities,created_at) VALUES($1,$2,$3,'Other','FR','Europe/Paris',ARRAY['dealer'],now())",[otherSiteId,t1,otherOrganizationId]);
     await adminPool.query("INSERT INTO customers(id,tenant_id,kind,display_name,email,acquisition_channel,acquisition_owner_organization_id,created_at) VALUES($1,$2,'individual','Seller','seller@example.test','staff',$3,now())",[customerId,t1,organizationId]);
+    await adminPool.query("INSERT INTO customers(id,tenant_id,kind,display_name,email,acquisition_channel,acquisition_owner_organization_id,created_at) VALUES($1,$2,'individual','Buyer','buyer@example.test','staff',$3,now())",[buyerCustomerId,t1,organizationId]);
     await adminPool.query("INSERT INTO assets(id,tenant_id,owner_customer_id,kind,vin_or_serial,attributes,created_at) VALUES($1,$2,$3,'car',$4,'{}',now())",[assetId,t1,customerId,`VIN-${assetId}`]);
     await adminPool.query("INSERT INTO assets(id,tenant_id,owner_customer_id,kind,vin_or_serial,attributes,created_at) VALUES($1,$2,$3,'car',$4,'{}',now())",[otherAssetId,t1,customerId,`VIN-${otherAssetId}`]);
+    await adminPool.query("INSERT INTO passports(id,tenant_id,asset_id,owner_customer_id,status,created_at) VALUES($1,$2,$3,$4,'active',now())",[passportId,t1,assetId,customerId]);
+    await adminPool.query("INSERT INTO documents(id,tenant_id,owner_customer_id,asset_id,passport_id,kind,name,mime_type,size_bytes,content_hash,storage_key,classification,version,created_by,created_at) VALUES($1,$2,$3,$4,$5,'cession_certificate','Certificat de cession','application/pdf',256,$6,$7,'private',1,$8,now())",[transferDocumentId,t1,customerId,assetId,passportId,"a".repeat(64),`transfers/${assetId}/cession.pdf`,newEntityId()]);
 
     const applicationUrl=new URL(connectionString!);
     applicationUrl.username=role;
@@ -116,8 +122,8 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM outbox_events WHERE tenant_id=$1 AND event_type='commerce.vehicle_published.v1' AND payload->>'stockItemId'=$2",[t1,stockItem.id])).rows[0].count,1);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM outbox_events WHERE tenant_id=$1 AND event_type='commerce.vehicle_ready.v1' AND aggregate_id=$2",[t1,stockItem.id])).rows[0].count,1);
     const saleResults=await Promise.allSettled([
-      commerce.sell(context,stockItem.id,{buyerCustomerId:customerId,salePriceCents:1500000}),
-      commerce.sell(context,stockItem.id,{buyerCustomerId:customerId,salePriceCents:1500000})
+      commerce.sell(context,stockItem.id,{buyerCustomerId,salePriceCents:1500000}),
+      commerce.sell(context,stockItem.id,{buyerCustomerId,salePriceCents:1500000})
     ]);
     assert.equal(saleResults.filter(result=>result.status==="fulfilled").length,1);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_sales WHERE tenant_id=$1 AND stock_item_id=$2",[t1,stockItem.id])).rows[0].count,1);
@@ -133,6 +139,15 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     assert.equal(delivered.stockItem.status,"delivered");
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_deliveries WHERE tenant_id=$1 AND stock_item_id=$2 AND status='completed'",[t1,stockItem.id])).rows[0].count,1);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM outbox_events WHERE tenant_id=$1 AND event_type='commerce.vehicle_delivered.v1' AND payload->>'stockItemId'=$2",[t1,stockItem.id])).rows[0].count,1);
+    const ownershipTransfer=await commerce.transferOwnership(context,stockItem.id,[transferDocumentId]);
+    assert.equal(ownershipTransfer.newOwnerCustomerId,buyerCustomerId);
+    assert.equal((await adminPool.query("SELECT owner_customer_id FROM assets WHERE tenant_id=$1 AND id=$2",[t1,assetId])).rows[0].owner_customer_id,buyerCustomerId);
+    assert.equal((await adminPool.query("SELECT owner_customer_id FROM passports WHERE tenant_id=$1 AND id=$2",[t1,passportId])).rows[0].owner_customer_id,buyerCustomerId);
+    assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_ownership_transfers WHERE tenant_id=$1 AND stock_item_id=$2",[t1,stockItem.id])).rows[0].count,1);
+    assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_transfer_documents WHERE tenant_id=$1 AND transfer_id=$2",[t1,ownershipTransfer.id])).rows[0].count,1);
+    assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM passport_entries WHERE tenant_id=$1 AND passport_id=$2 AND type='ownership' AND evidence_hash=$3",[t1,passportId,ownershipTransfer.evidenceHash])).rows[0].count,1);
+    assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM outbox_events WHERE tenant_id=$1 AND event_type='commerce.vehicle_ownership_transferred.v1' AND aggregate_id=$2",[t1,ownershipTransfer.id])).rows[0].count,1);
+    await assert.rejects(()=>commerce.transferOwnership(context,stockItem.id,[transferDocumentId]),/Ownership is already transferred/);
     assert.equal(await commerceRepository.findStockItem(tenantId(t2),stockItem.id),null);
     await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_stock_items(id,tenant_id,organization_id,site_id,asset_id,acquisition_mode,acquisition_cost_cents,status,created_by,created_at,updated_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,'purchase',100,'acquired',$5,now(),now())`,[t1,organizationId,otherSiteId,otherAssetId,context.actorId]),/vehicle_stock_tenant_organization_site_fk/);
     await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_publications(id,tenant_id,organization_id,site_id,stock_item_id,channel,asking_price_cents,status,published_by,published_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,'professional_website',1590000,'published',$5,now())`,[t1,otherOrganizationId,otherSiteId,stockItem.id,context.actorId]),/vehicle_publications_tenant_stock_scope_fk/);
@@ -153,6 +168,9 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     const scopeSaleId=newEntityId();
     await adminPool.query(`INSERT INTO vehicle_sales(id,tenant_id,organization_id,site_id,stock_item_id,buyer_customer_id,sale_price_cents,acquisition_cost_cents,gross_margin_cents,sold_by,sold_at) VALUES($1,$2,$3,$4,$5,$6,1500000,1000000,500000,$7,now())`,[scopeSaleId,t1,organizationId,siteId,scopeTestStock.id,customerId,context.actorId]);
     await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_deliveries(id,tenant_id,organization_id,site_id,stock_item_id,sale_id,status,planned_at,scheduled_by,created_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,$5,'scheduled',now(),$6,now())`,[t1,otherOrganizationId,otherSiteId,scopeTestStock.id,scopeSaleId,context.actorId]),/vehicle_deliveries_sale_scope_fk/);
+    const scopeDeliveryId=newEntityId();
+    await adminPool.query(`INSERT INTO vehicle_deliveries(id,tenant_id,organization_id,site_id,stock_item_id,sale_id,status,planned_at,handover_odometer_km,scheduled_by,completed_by,completed_at,created_at) VALUES($1,$2,$3,$4,$5,$6,'completed',now(),0,$7,$7,now(),now())`,[scopeDeliveryId,t1,organizationId,siteId,scopeTestStock.id,scopeSaleId,context.actorId]);
+    await assert.rejects(()=>adminPool.query(`INSERT INTO vehicle_ownership_transfers(id,tenant_id,organization_id,site_id,stock_item_id,sale_id,delivery_id,asset_id,previous_owner_customer_id,new_owner_customer_id,evidence_hash,transferred_by,transferred_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now())`,[t1,otherOrganizationId,otherSiteId,scopeTestStock.id,scopeSaleId,scopeDeliveryId,otherAssetId,customerId,buyerCustomerId,"b".repeat(64),context.actorId]),/ownership_transfer_delivery_scope_fk/);
   } finally {
     if(applicationPool) await applicationPool.end();
     await adminPool.query(`DROP OWNED BY ${role}`).catch(()=>undefined);
