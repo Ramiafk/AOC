@@ -1,9 +1,9 @@
 import type { EntityId, TenantId } from "../../core/src/identity.ts";
 import { DomainError } from "../../core/src/errors.ts";
-import type { VehicleCessionDossierProps, VehicleCommerceRepository, VehicleDeliveryProps, VehicleMediaProps, VehicleOwnershipTransferProps, VehiclePreparationCheckProps, VehiclePublicationProps, VehicleSaleProps, VehicleStockItemProps } from "./vehicle-commerce.ts";
+import type { VehicleCessionDossierProps, VehicleCommerceRepository, VehicleDeliveryProps, VehicleFlashSaleProps, VehicleMediaProps, VehicleOwnershipTransferProps, VehiclePreparationCheckProps, VehiclePublicationProps, VehicleSaleProps, VehicleStockItemProps } from "./vehicle-commerce.ts";
 
 export class InMemoryVehicleCommerceRepository implements VehicleCommerceRepository {
-  assets=new Set<string>(); assetOwners=new Map<string,EntityId>();documents=new Set<string>();documentKinds=new Map<string,string>();documentOwners=new Map<string,EntityId>();customers=new Set<string>();sites=new Map<string,EntityId>();items:VehicleStockItemProps[]=[];publications:VehiclePublicationProps[]=[];checks:VehiclePreparationCheckProps[]=[];media:VehicleMediaProps[]=[];sales:VehicleSaleProps[]=[];deliveries:VehicleDeliveryProps[]=[];transfers:VehicleOwnershipTransferProps[]=[];cessionDossiers:VehicleCessionDossierProps[]=[];
+  assets=new Set<string>(); assetOwners=new Map<string,EntityId>();documents=new Set<string>();documentKinds=new Map<string,string>();documentOwners=new Map<string,EntityId>();customers=new Set<string>();sites=new Map<string,EntityId>();items:VehicleStockItemProps[]=[];publications:VehiclePublicationProps[]=[];checks:VehiclePreparationCheckProps[]=[];media:VehicleMediaProps[]=[];sales:VehicleSaleProps[]=[];deliveries:VehicleDeliveryProps[]=[];transfers:VehicleOwnershipTransferProps[]=[];cessionDossiers:VehicleCessionDossierProps[]=[];flashSales:VehicleFlashSaleProps[]=[];
   private readonly locks=new Map<string,Promise<void>>();
   async assetExists(tenantId:TenantId,assetId:EntityId){return this.assets.has(`${tenantId}:${assetId}`);}
   async siteBelongsToOrganization(tenantId:TenantId,organizationId:EntityId,siteId:EntityId){return this.sites.get(`${tenantId}:${siteId}`)===organizationId;}
@@ -15,6 +15,7 @@ export class InMemoryVehicleCommerceRepository implements VehicleCommerceReposit
   async documentsMatchKinds(tenantId:TenantId,assetId:EntityId,ownerCustomerId:EntityId,documents:Readonly<Record<EntityId,string>>){return Object.entries(documents).every(([id,kind])=>{const key=`${tenantId}:${assetId}:${id}`;return this.documentKinds.get(key)===kind&&this.documentOwners.get(key)===ownerCustomerId;});}
   async findOwnershipTransfer(tenantId:TenantId,stockItemId:EntityId){return this.transfers.find(value=>value.tenantId===tenantId&&value.stockItemId===stockItemId)??null;}
   async findCessionDossier(tenantId:TenantId,stockItemId:EntityId){return this.cessionDossiers.find(value=>value.tenantId===tenantId&&value.stockItemId===stockItemId)??null;}
+  async findOpenFlashSale(tenantId:TenantId,stockItemId:EntityId){return this.flashSales.find(value=>value.tenantId===tenantId&&value.stockItemId===stockItemId&&value.status==="scheduled")??null;}
   async saveStockItem(value:VehicleStockItemProps){this.items=this.items.filter(item=>item.id!==value.id);this.items.push(value);}
   async findStockItem(tenantId:TenantId,id:EntityId){return this.items.find(item=>item.tenantId===tenantId&&item.id===id)??null;}
   async listPublications(tenantId:TenantId,stockItemId:EntityId){return this.publications.filter(item=>item.tenantId===tenantId&&item.stockItemId===stockItemId);}
@@ -30,4 +31,6 @@ export class InMemoryVehicleCommerceRepository implements VehicleCommerceReposit
   async completeDelivery(value:VehicleDeliveryProps,stockItem:VehicleStockItemProps){await this.saveStockItem(stockItem);this.deliveries=this.deliveries.map(item=>item.id===value.id?value:item);}
   async transferOwnership(value:VehicleOwnershipTransferProps){this.assetOwners.set(`${value.tenantId}:${value.assetId}`,value.newOwnerCustomerId);this.transfers.push(value);}
   async issueCessionDossier(value:VehicleCessionDossierProps){if(this.cessionDossiers.some(item=>item.tenantId===value.tenantId&&item.stockItemId===value.stockItemId))throw new DomainError("CESSION_DOSSIER_ALREADY_ISSUED","Cession dossier is already issued");this.cessionDossiers.push(value);}
+  async scheduleFlashSale(value:VehicleFlashSaleProps){if(await this.findOpenFlashSale(value.tenantId,value.stockItemId))throw new DomainError("FLASH_SALE_ALREADY_OPEN","An open flash sale already exists for this vehicle");this.flashSales.push(value);}
+  async cancelFlashSale(value:VehicleFlashSaleProps){this.flashSales=this.flashSales.map(current=>current.id===value.id?value:current);}
 }
