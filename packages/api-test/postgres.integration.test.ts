@@ -678,8 +678,8 @@ test(
         await assert.rejects(
           () =>
             adminPool.query(
-              `INSERT INTO vehicle_auction_guarantees(id,tenant_id,organization_id,site_id,auction_id,stock_item_id,bidder_customer_id,provider,provider_reference,idempotency_key,amount_cents,currency,status,authorized_at)
-               VALUES($1,$2,$3,$4,$5,$6,$7,'test_psp',$8,$9,$10,$11,'authorized',$12)`,
+              `INSERT INTO vehicle_auction_guarantees(id,tenant_id,organization_id,site_id,auction_id,stock_item_id,bidder_customer_id,provider,provider_reference,idempotency_key,amount_cents,currency,status,authorized_at,closed_at,closed_reason)
+               VALUES($1,$2,$3,$4,$5,$6,$7,'test_psp',$8,$9,$10,$11,'released',$12,$12,'unsold')`,
               [
                 newEntityId(),
                 t1,
