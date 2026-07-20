@@ -10,6 +10,7 @@ Après le transfert de propriété, constituer une seule fois le dossier remis �
 - les deux documents sont distincts ;
 - leurs types sont respectivement `cession_certificate` et `delivery_receipt` ;
 - les documents appartiennent au même actif que le transfert ;
+- les documents appartiennent au nouvel acquéreur ;
 - un seul dossier peut être émis par véhicule en stock ;
 - le verrou pessimiste est acquis avant les lectures métier ;
 - dossier et événement de notification sont écrits dans une transaction unique.
@@ -29,11 +30,11 @@ La route exige `commerce.manage` et résout le périmètre organisation/site à 
 
 ## Persistance et notification
 
-La migration immuable `023_vehicle_cession_dossiers.sql` ajoute la table tenant-scoped, son unicité par stock, ses FK composites et la RLS forcée. L'émission produit atomiquement `commerce.vehicle_cession_dossier_issued.v1` avec le client, l'actif, les deux documents et le topic `document`. Le dispatcher de notifications consommera cet événement sans coupler le domaine Commerce à un fournisseur de messagerie.
+La migration immuable `023_vehicle_cession_dossiers.sql` ajoute la table tenant-scoped, son unicité par stock, ses FK composites et la RLS forcée. La FK vers le transfert inclut l'actif et le nouvel acquéreur. Les FK documentaires incluent également l'actif et le propriétaire, empêchant PostgreSQL d'accepter un dossier avec les pièces d'un autre véhicule ou encore détenues par le vendeur. L'émission produit atomiquement `commerce.vehicle_cession_dossier_issued.v1` avec le client, l'actif, les deux documents et le topic `document`. Le dispatcher de notifications consommera cet événement sans coupler le domaine Commerce à un fournisseur de messagerie.
 
 ## Tests
 
-Les tests couvrent le parcours nominal, l'ordre transfert → dossier, les types documentaires, les doublons, la route scoped, l'outbox transactionnelle et le rejet PostgreSQL d'un dossier croisant organisation et site.
+Les tests couvrent le parcours nominal, l'ordre transfert → dossier, les types documentaires, le propriétaire acquéreur, l'erreur métier stable sur répétition, la concurrence, la route scoped, l'outbox transactionnelle et les rejets PostgreSQL d'un dossier croisant organisation, site, actif, acquéreur ou documents.
 
 ## Limites
 
