@@ -11,6 +11,7 @@ Chaque lot livre une capacité exploitable. P0 désigne le pilote, pas la limite
 | 4 — Atelier & interventions | Planning, ordres de réparation, diagnostic, devis, validation, pièces, temps, contrôle qualité | 1,2,3 | parcours demande → OR → facture → historique passeport complet |
 | 5 — Commerce véhicules | Stock, reprise, achat, préparation, annonce, vente classique, flash, enchères, livraison | 1,3 | stock publié une fois vers surface pro et plateforme centrale |
 | 5E — Transfert de propriété | Après remise, mutation atomique du propriétaire de l'actif et du passeport, preuve documentaire, historique et événement outbox | 5D,2C | une cession livrée transfère une seule fois l'actif et son passeport au bon acheteur avec preuve vérifiable |
+| 5F — Dossier de cession | Certificat de cession et procès-verbal de remise liés au transfert, délivrance unique et demande de notification par outbox | 5E,2C,3B | l'acquéreur reçoit un dossier complet, cohérent avec le véhicule et traçable sans double émission |
 | 6 — Pièces & équipement | Catalogue, compatibilité, fournisseurs, commandes, stock, e-commerce, pose | 1,4 | boucle pièce → intervention → marge et traçabilité |
 | 7 — Finance, documents & conformité | Devis, commandes, factures, paiements, commissions, Cerfa/démarches, signature, preuve | 1,3 | chaîne documentaire et financière auditable de bout en bout |
 | 8 — Fabrique marque blanche | Design tokens, domaines, CMS/SEO, site pro, portail client, configuration PWA/app | 1–7 | une nouvelle marque est créée par configuration, sans fork |
@@ -55,3 +56,5 @@ Une réservation conserve toujours son canal d'origine (`central_marketplace`, `
 | 5B — Merchandising véhicule | Terminé | checklist obligatoire, image principale et préparation auditable avant publication |
 | 5C — Vente véhicule | Terminé | vente verrouillée, marge brute, retrait atomique des annonces et événement outbox |
 | 5D — Livraison véhicule | Terminé | planification unique, remise auditable, kilométrage et événement outbox atomique |
+| 5E — Transfert de propriété | Terminé | mutation atomique actif/passeport, justificatifs, historique et outbox |
+| 5F — Dossier de cession | Terminé | pièces réglementaires typées, dossier unique et demande de notification documentaire |
