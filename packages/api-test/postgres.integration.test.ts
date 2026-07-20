@@ -147,6 +147,7 @@ test("PostgreSQL inventory adapter sets RLS context and serializes concurrent re
     const closeResults=await Promise.allSettled([closingCommerce.closeAuction(context,stockItem.id,auction.id),closingCommerce.closeAuction(context,stockItem.id,auction.id)]);
     assert.equal(closeResults.filter(result=>result.status==="fulfilled").length,1);
     assert.equal((await adminPool.query("SELECT winning_bid_id FROM vehicle_auctions WHERE tenant_id=$1 AND id=$2 AND status='sold'",[t1,auction.id])).rows[0].winning_bid_id,winningBid.id);
+    await assert.rejects(()=>adminPool.query("UPDATE vehicle_auctions SET winner_customer_id=$3 WHERE tenant_id=$1 AND id=$2",[t1,auction.id,customerId]),/vehicle_auction_winner_identity_fk/);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_sales WHERE tenant_id=$1 AND stock_item_id=$2",[t1,stockItem.id])).rows[0].count,1);
     assert.equal((await adminPool.query("SELECT gross_margin_cents FROM vehicle_sales WHERE tenant_id=$1 AND stock_item_id=$2",[t1,stockItem.id])).rows[0].gross_margin_cents,300000);
     assert.equal((await adminPool.query("SELECT count(*)::int AS count FROM vehicle_publications WHERE tenant_id=$1 AND stock_item_id=$2 AND status='published'",[t1,stockItem.id])).rows[0].count,0);
