@@ -28,10 +28,11 @@ permissions:
   statuses: read
 
 concurrency:
-  # Generation v2: abandons the stale queue created before the runtime hotfix.
-  # Subsequent events remain serialized so two agent teams cannot mutate one lot.
+  # A push on main contains a newer trusted runtime and must cancel an obsolete
+  # queued/running generation. Routine schedule/comment events stay serialized
+  # without interrupting a long agent task already in progress.
   group: aoc-autonomous-delivery-v2
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 env:
   NPM_CONFIG_IGNORE_SCRIPTS: "true"
@@ -64,7 +65,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/agents/reconcile-issues.mjs
 
+      - name: Read autonomous pause state
+        id: control
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PAUSED=$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state open \
+            --label 'agent:paused' \
+            --limit 100 \
+            --json body,number \
+            --jq '[.[] | select((.body // "") | contains("<!-- AOC-AUTONOMY-CONTROL -->"))] | length > 0')
+          echo "paused=$PAUSED" >> "$GITHUB_OUTPUT"
+          if [ "$PAUSED" = "true" ]; then
+            echo "AOC autonomy is paused: registry reconciliation completed, agent execution skipped."
+          fi
+
       - name: Run GitHub-only multi-agent orchestrator
+        if: steps.control.outputs.paused != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_MODELS_TOKEN: ${{ github.token }}
