@@ -41,12 +41,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          mkdir -p .ci-diagnostics
           gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/autonomous-delivery.yml" \
-            --jq '{id,name,path,state,created_at,updated_at}' | tee /tmp/autonomy-workflow.json
+            --jq '{id,name,path,state,created_at,updated_at}' | tee .ci-diagnostics/autonomy-workflow.json
           test "$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/autonomous-delivery.yml" --jq .state)" = "active"
-          echo "Recent autonomous runs:"
-          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/autonomous-delivery.yml/runs?per_page=10" \
-            --jq '.workflow_runs[] | [.id,.event,.status,.conclusion,.head_sha,.created_at] | @tsv' || true
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/autonomous-delivery.yml/runs?per_page=20" \
+            --jq '.workflow_runs | map({id,event,status,conclusion,head_sha,head_branch,created_at,updated_at,run_number,html_url})' \
+            | tee .ci-diagnostics/autonomy-runs.json
+      - name: Upload autonomous workflow diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: autonomy-workflow-diagnostics-${{ github.run_id }}
+          path: .ci-diagnostics/
+          if-no-files-found: error
+          retention-days: 7
       - run: npx --no-install tsc --noEmit
       - run: node --test --experimental-strip-types 'packages/**/*.test.ts'
       - run: node --experimental-strip-types scripts/check-architecture.ts
