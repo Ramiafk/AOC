@@ -30,9 +30,6 @@ permissions:
   statuses: read
 
 concurrency:
-  # A push on main contains a newer trusted runtime and must cancel an obsolete
-  # queued/running generation. Routine schedule/comment/label events stay
-  # serialized without interrupting a long agent task already in progress.
   group: aoc-autonomous-delivery-v2
   cancel-in-progress: ${{ github.event_name == 'push' }}
 
@@ -65,6 +62,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Route trusted autonomy commands
+        id: command
         if: github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent ')
         env:
           GH_TOKEN: ${{ github.token }}
@@ -101,7 +99,7 @@ jobs:
       - name: Publish orchestration start checkpoint
         if: >-
           steps.control.outputs.paused != 'true' ||
-          (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent '))
+          steps.command.outputs.routed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/agents/run-progress.mjs start
@@ -109,7 +107,7 @@ jobs:
       - name: Run GitHub-only multi-agent orchestrator
         if: >-
           steps.control.outputs.paused != 'true' ||
-          (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent '))
+          steps.command.outputs.routed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_MODELS_TOKEN: ${{ github.token }}
@@ -121,7 +119,12 @@ jobs:
           AOC_MODEL_CODE: ${{ vars.AOC_MODEL_CODE }}
           AOC_MODEL_FAST: ${{ vars.AOC_MODEL_FAST }}
           AOC_MODEL_DESIGN: ${{ vars.AOC_MODEL_DESIGN }}
-        run: node scripts/agents/orchestrator.mjs
+        run: |
+          if [ "${{ steps.command.outputs.routed }}" = "true" ]; then
+            GITHUB_EVENT_NAME=workflow_dispatch GITHUB_EVENT_PATH= node scripts/agents/orchestrator.mjs
+          else
+            node scripts/agents/orchestrator.mjs
+          fi
 
       - name: Publish orchestration finish checkpoint
         if: always()
