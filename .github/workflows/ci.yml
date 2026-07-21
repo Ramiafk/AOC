@@ -10,12 +10,16 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: autonomy-json-output-hotfix-${{ github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   apply-json-output-hotfix:
     if: >-
+      github.event_name == 'push' &&
       github.actor != 'github-actions[bot]' &&
-      ((github.event_name == 'push' && github.ref_name == 'chore/autonomy-json-output-hotfix-v2') ||
-       (github.event_name == 'pull_request' && github.head_ref == 'chore/autonomy-json-output-hotfix-v2'))
+      github.ref_name == 'chore/autonomy-json-output-hotfix-v2'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,7 +70,6 @@ jobs:
           }
           writeFileSync('.github/workflows/ci.yml', ci);
           NODE
-          rm -f .github/workflows/_apply-autonomy-json-output-hotfix.yml
           rm -f scripts/agents/apply-orchestrator-json-hotfix.cjs
           git config user.name "AOC Governance Hotfix"
           git config user.email "aoc-governance@users.noreply.github.com"
