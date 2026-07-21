@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "enabledByDefault": true,
   "scheduleMinutes": 10,
   "maxAgentTurns": 20,
@@ -9,6 +9,10 @@
   "maxGithubModelsResponseTokens": 800,
   "maxTaskCharacters": 4500,
   "maxConversationRounds": 1,
+  "modelRetryBaseMilliseconds": 15000,
+  "modelRetryMaxMilliseconds": 180000,
+  "modelRetryBudgetMilliseconds": 900000,
+  "transientModelAutoRetryLimit": 3,
   "reconcileDuplicateIssues": true,
   "maxFileBytes": 500000,
   "maxGeneratedImageBytes": 6000000,
