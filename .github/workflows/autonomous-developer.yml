@@ -101,11 +101,14 @@ jobs:
                 .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
                 .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
               const branch = branchMatch?.[1] || `agent/lot-${lotId}-${slug}`;
+              let branchExists = false;
+              try { await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` }); branchExists = true; } catch (error) { if (error.status !== 404) throw error; }
               core.setOutput('mode', mode);
               core.setOutput('issue_number', String(issueNumber));
               core.setOutput('pr_number', '');
               core.setOutput('branch', branch);
-              core.setOutput('checkout_ref', 'main');
+              core.setOutput('branch_exists', branchExists ? 'true' : 'false');
+              core.setOutput('checkout_ref', branchExists ? branch : 'main');
               core.setOutput('title', issue.title.replace(/^\[AUTONOMOUS LOT\]\s*/i, ''));
               return;
             }
@@ -115,10 +118,13 @@ jobs:
             const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
             if (pr.state !== 'open') return core.setFailed(`PR #${prNumber} is not open`);
             if (!pr.head.ref.startsWith('agent/lot-')) return core.setFailed('Only autonomous lot branches can be corrected');
-            if (process.env.EXPECTED_HEAD_SHA && pr.head.sha !== process.env.EXPECTED_HEAD_SHA) return core.setFailed(`Head moved: expected ${process.env.EXPECTED_HEAD_SHA}, got ${pr.head.sha}`);
+            if (process.env.EXPECTED_HEAD_SHA && pr.head.sha !== process.env.EXPECTED_HEAD_SHA) {
+              return core.setFailed(`Head moved: expected ${process.env.EXPECTED_HEAD_SHA}, got ${pr.head.sha}`);
+            }
             const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number: prNumber, per_page: 100 });
-            const rounds = comments.filter((comment) => comment.body?.includes('AOS_AUTONOMY_CTO') && comment.body?.includes('CHANGES_REQUIRED')).length;
-            if (rounds >= 4) return core.setFailed(`Safety stop: ${rounds} CTO correction rounds already attempted`);
+            const ctoRounds = comments.filter((comment) => comment.body?.includes('AOS_AUTONOMY_CTO') && comment.body?.includes('CHANGES_REQUIRED')).length;
+            const failedRuns = comments.filter((comment) => comment.body?.includes('AOS_AUTONOMY_BLOCKED')).length;
+            if (ctoRounds >= 4 || failedRuns >= 3) return core.setFailed(`Safety stop: ${ctoRounds} CTO rounds and ${failedRuns} failed developer runs`);
             core.setOutput('mode', mode);
             core.setOutput('issue_number', '');
             core.setOutput('pr_number', String(prNumber));
@@ -133,7 +139,7 @@ jobs:
           persist-credentials: true
 
       - name: Create initial lot branch
-        if: steps.context.outputs.mode == 'initial'
+        if: steps.context.outputs.mode == 'initial' && steps.context.outputs.branch_exists != 'true'
         env:
           BRANCH: ${{ steps.context.outputs.branch }}
         run: git switch -c "$BRANCH"
@@ -168,7 +174,8 @@ jobs:
               gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '"\nTitre : " + .title + "\nBase : " + .base.ref + "\nHead : " + .head.sha + "\n\nDescription :\n" + (.body // "")'
               echo
               echo "## Dernière décision CTO"
-              gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --jq '[.[] | select(.body | contains("AOS_AUTONOMY_CTO"))] | last | .body'
+              gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+                --jq '[.[] | select(.body | contains("AOS_AUTONOMY_CTO"))] | last | .body'
             fi
             echo
             echo "# Instruction finale"
@@ -180,10 +187,15 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          if [ -n "$OPENAI_API_KEY" ]; then echo "codex=true" >> "$GITHUB_OUTPUT"; else echo "codex=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "codex=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "codex=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Develop with Codex
         if: steps.provider.outputs.codex == 'true'
+        id: codex
         uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
@@ -210,9 +222,15 @@ jobs:
         env:
           BRANCH: ${{ steps.context.outputs.branch }}
         run: |
-          { git diff --name-only HEAD; git ls-files --others --exclude-standard; } | sort -u > .agent-runtime/changed-files.txt
+          {
+            git diff --name-only HEAD
+            git ls-files --others --exclude-standard
+          } | sort -u > .agent-runtime/changed-files.txt
           node scripts/agents/check-protected-paths.mjs --files=.agent-runtime/changed-files.txt --branch="$BRANCH"
-          if [ ! -s .agent-runtime/changed-files.txt ]; then echo "The agent produced no repository change" >&2; exit 1; fi
+          if [ ! -s .agent-runtime/changed-files.txt ]; then
+            echo "The agent produced no repository change" >&2
+            exit 1
+          fi
 
       - name: Commit and push
         id: push
@@ -266,7 +284,9 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           SHA: ${{ steps.push.outputs.sha }}
         run: |
-          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" -f state=success -f context='autonomy/ci' -f description='Typecheck, PostgreSQL tests and architecture passed'
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
+            -f state=success -f context='autonomy/ci' \
+            -f description='Typecheck, PostgreSQL tests and architecture passed'
           gh pr comment "$PR_NUMBER" --body "<!-- AOS_AUTONOMY_DEV sha=${SHA} -->
           ## Agent développeur : lot prêt pour revue CTO
 
