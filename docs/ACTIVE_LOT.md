@@ -9,6 +9,7 @@
 - Source de la roadmap multi-agents : `config/agents/roadmap.json`
 - Orchestration : `.github/workflows/autonomous-delivery.yml`
 - Relance opérationnelle : push contrôlé sur `main` après détection d’un événement `agent:ready` non consommé.
+- Relance PR-first : push contrôlé après fusion du moteur qui publie la branche et la PR avant la planification.
 
 ## Source de vérité opérationnelle
 
