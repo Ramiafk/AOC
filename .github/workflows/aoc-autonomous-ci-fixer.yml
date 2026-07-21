@@ -1,0 +1,57 @@
+name: AOC Autonomous CI Fixer
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: aoc-autonomous-multi-agent-loop
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: >-
+      ${{ vars.AOC_AUTONOMY_ENABLED == 'true' &&
+          github.event.workflow_run.conclusion == 'failure' &&
+          startsWith(github.event.workflow_run.head_branch, 'agent/') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout failed agent branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+          token: ${{ secrets.AOC_AUTONOMY_GITHUB_TOKEN || github.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Configure autonomous Git identity
+        run: |
+          git config user.name "aoc-development-agent[bot]"
+          git config user.email "aoc-development-agent[bot]@users.noreply.github.com"
+
+      - name: Diagnose, correct, validate and push
+        env:
+          GITHUB_TOKEN: ${{ secrets.AOC_AUTONOMY_GITHUB_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.AOC_AUTONOMY_GITHUB_TOKEN || github.token }}
+          AOC_AUTONOMY_GITHUB_TOKEN: ${{ secrets.AOC_AUTONOMY_GITHUB_TOKEN }}
+          AOC_AGENT_API_KEY: ${{ secrets.AOC_AGENT_API_KEY || secrets.OPENAI_API_KEY }}
+          AOC_AGENT_MODEL: ${{ vars.AOC_AGENT_MODEL }}
+          AOC_AGENT_ENDPOINT: ${{ vars.AOC_AGENT_ENDPOINT }}
+          AOC_FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
+          AOC_FAILED_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: node scripts/agents/ci-fixer.mjs
