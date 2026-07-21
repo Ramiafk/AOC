@@ -15,9 +15,9 @@ concurrency:
 jobs:
   apply-rate-limit-resilience:
     if: >-
-      github.event_name == 'push' &&
-      github.ref_name == 'chore/autonomy-rate-limit-resilience' &&
-      github.actor != 'github-actions[bot]'
+      github.actor != 'github-actions[bot]' &&
+      ((github.event_name == 'push' && github.ref_name == 'chore/autonomy-rate-limit-resilience') ||
+       (github.event_name == 'pull_request' && github.head_ref == 'chore/autonomy-rate-limit-resilience'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
