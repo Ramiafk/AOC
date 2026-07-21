@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "project": "AOC",
+  "mode": "strict-sequential",
+  "activeLotLimit": 1,
+  "activePullRequestLimit": 1,
+  "allowedDevelopmentBranchPrefixes": ["agent/"],
+  "governanceBranchPrefixes": ["chore/", "docs/"],
+  "maxAutomaticFixRoundsPerHead": 3,
+  "maxLotsCreatedPerRun": 1,
+  "maxAgentToolCallsPerRole": 60,
+  "maxReadBytesPerFile": 200000,
+  "autoMerge": true,
+  "autoCreateNextLot": true,
+  "requireCurrentHeadCiSuccess": true,
+  "requireCtoApprovalForCurrentHead": true,
+  "requireNoBlockingSpecialistReview": true,
+  "requiredReviewRoles": [
+    "product",
+    "domain",
+    "architecture",
+    "qa",
+    "security",
+    "cto"
+  ],
+  "conditionalReviewRoles": {
+    "data": ["infrastructure/postgres/", "migrations/", ".sql"],
+    "design": ["apps/web/", "apps/mobile/", "packages/ui/", "design/"],
+    "accessibility": ["apps/web/", "apps/mobile/", "packages/ui/"],
+    "devops": [".github/", "Dockerfile", "infrastructure/", "deploy/"],
+    "privacy": ["customers", "contacts", "documents", "payments", "guarantee", "auth", "identity"],
+    "documentation": ["docs/", "README.md", "apps/", "packages/"]
+  },
+  "protectedPaths": [
+    ".github/workflows/",
+    ".agents/",
+    "AGENTS.md",
+    "infrastructure/postgres/migrate.ts"
+  ],
+  "developerProtectedPathRule": "Changes to protected paths require an explicit governance task and CTO review.",
+  "allowedCommands": [
+    "npm ci",
+    "npm install",
+    "npm run typecheck",
+    "npm test",
+    "npm run check",
+    "npm run build",
+    "git status --short",
+    "git diff",
+    "git diff --check",
+    "git ls-files",
+    "git grep"
+  ],
+  "forbiddenActions": [
+    "push-directly-to-main",
+    "force-push-main",
+    "merge-with-failing-ci",
+    "self-approve-development",
+    "store-secrets-in-repository",
+    "run-untrusted-fork-code-with-write-token",
+    "start-second-lot",
+    "silently-change-product-scope"
+  ],
+  "stopConditions": [
+    "security-critical-ambiguity",
+    "legal-or-regulatory-ambiguity",
+    "payment-provider-contract-ambiguity",
+    "irreversible-production-data-risk",
+    "three-failed-fix-rounds",
+    "conflicting-active-lots",
+    "missing-ai-runtime-configuration"
+  ],
+  "humanEscalationLabel": "agent:human-required",
+  "pauseLabel": "agent:paused",
+  "machineCommentMarker": "aoc-agent-event-v1"
+}
