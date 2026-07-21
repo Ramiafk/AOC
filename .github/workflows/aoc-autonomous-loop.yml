@@ -1,0 +1,71 @@
+name: AOC Autonomous Multi-Agent Loop
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Optional reason for the manual run
+        required: false
+        type: string
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  push:
+    branches: [main]
+  issues:
+    types: [opened, edited, labeled, unlabeled, reopened, closed]
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: aoc-autonomous-multi-agent-loop
+  cancel-in-progress: false
+
+jobs:
+  orchestrate:
+    if: ${{ vars.AOC_AUTONOMY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: Checkout the trusted default branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.AOC_AUTONOMY_GITHUB_TOKEN || github.token }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install repository dependencies
+        run: npm ci
+
+      - name: Configure autonomous Git identity
+        run: |
+          git config user.name "aoc-development-agent[bot]"
+          git config user.email "aoc-development-agent[bot]@users.noreply.github.com"
+
+      - name: Run the autonomous delivery state machine
+        env:
+          GITHUB_TOKEN: ${{ secrets.AOC_AUTONOMY_GITHUB_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.AOC_AUTONOMY_GITHUB_TOKEN || github.token }}
+          AOC_AUTONOMY_GITHUB_TOKEN: ${{ secrets.AOC_AUTONOMY_GITHUB_TOKEN }}
+          AOC_AGENT_API_KEY: ${{ secrets.AOC_AGENT_API_KEY || secrets.OPENAI_API_KEY }}
+          AOC_AGENT_MODEL: ${{ vars.AOC_AGENT_MODEL }}
+          AOC_AGENT_ENDPOINT: ${{ vars.AOC_AGENT_ENDPOINT }}
+          AOC_AUTONOMY_ENABLED: ${{ vars.AOC_AUTONOMY_ENABLED }}
+          AOC_AUTOMERGE_ENABLED: ${{ vars.AOC_AUTOMERGE_ENABLED }}
+          AOC_AUTO_CREATE_LOTS: ${{ vars.AOC_AUTO_CREATE_LOTS }}
+          AOC_INCLUDE_AGENT_TRANSCRIPT: ${{ vars.AOC_INCLUDE_AGENT_TRANSCRIPT }}
+          AOC_AGENT_MAX_TOOL_CALLS: ${{ vars.AOC_AGENT_MAX_TOOL_CALLS }}
+        run: node scripts/agents/orchestrator.mjs
