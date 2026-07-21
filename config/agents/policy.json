@@ -4,7 +4,7 @@
   "scheduleMinutes": 10,
   "maxAgentTurns": 20,
   "maxFixRoundsPerPr": 3,
-  "maxOutputCharactersPerTool": 1200,
+  "maxOutputCharactersPerTool": 2000,
   "maxGithubModelsRequestCharacters": 14000,
   "maxGithubModelsResponseTokens": 800,
   "maxTaskCharacters": 3000,
