@@ -4,7 +4,10 @@
     "CODEOWNERS",
     ".github/PULL_REQUEST_TEMPLATE.md",
     "docs/AUTONOMOUS_WORKFLOW.md",
-    "docs/ACTIVE_LOT.md"
+    "docs/ACTIVE_LOT.md",
+    ".gitignore",
+    ".npmrc",
+    "scripts/check-architecture.ts"
   ],
   "prefixes": [
     ".github/workflows/",
