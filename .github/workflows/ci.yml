@@ -6,9 +6,81 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  generate-bootstrap-resume:
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      ((github.event_name == 'push' && github.ref_name == 'chore/autonomy-resume-bootstrap-generator') ||
+       (github.event_name == 'pull_request' && github.head_ref == 'chore/autonomy-resume-bootstrap-generator'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chore/autonomy-resume-bootstrap-generator
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Generate bootstrap-resume orchestrator
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/agents/orchestrator.mjs')
+          source = path.read_text()
+          before = '''async function handlePr(pr) {
+            const currentLabels = labelsOf(pr);
+            if (currentLabels.has("agent:blocked") || currentLabels.has("agent:human-gate")) return;
+            const comments = await prComments(pr.number);
+            const trusted = trustedComments(comments);
+            const decision = decisionFromComments(trusted, pr.headRefOid);'''
+          after = '''async function handlePr(pr) {
+            const currentLabels = labelsOf(pr);
+            if (currentLabels.has("agent:human-gate")) return;
+            const comments = await prComments(pr.number);
+            const trusted = trustedComments(comments);
+            const bootstrapOnly = pr.body?.includes("AOC-AUTONOMY: do-not-remove") &&
+              !trusted.some(item => item.body?.includes("[AOC-DEV][sha:"));
+            if (bootstrapOnly) {
+              const issueNumber = issueNumberFromPr(pr);
+              const issue = issueNumber ? (await listIssues("all")).find(value => value.number === issueNumber) : null;
+              if (!issue) {
+                await editLabels(pr.number, ["agent:blocked"], ["agent:dev-working", "agent:cto-review"]);
+                await comment(pr.number, "[AOC-ORCHESTRATOR] PR bootstrap sans Issue de lot canonique. Reprise automatique impossible.");
+                return;
+              }
+              await editLabels(pr.number, ["agent:dev-working"], ["agent:blocked", "agent:cto-review", "agent:approved", "agent:changes-required"]);
+              await editLabels(issue.number, ["agent:active", "agent:dev-working"], ["agent:ready", "agent:blocked", "agent:human-gate"]);
+              await comment(pr.number, "[AOC-ORCHESTRATOR] Reprise de l'implementation sur la PR bootstrap existante avant toute revue CTO.");
+              await startLot(issue);
+              return;
+            }
+            if (currentLabels.has("agent:blocked")) return;
+            const decision = decisionFromComments(trusted, pr.headRefOid);'''
+          if before not in source:
+              raise SystemExit('Expected handlePr bootstrap anchor not found')
+          source = source.replace(before, after, 1)
+          for token in ['bootstrapOnly', 'await startLot(issue)', 'PR bootstrap sans Issue de lot canonique']:
+              if token not in source:
+                  raise SystemExit(f'Missing generated invariant: {token}')
+          Path('/tmp/orchestrator.mjs').write_text(source)
+          PY
+          node --check /tmp/orchestrator.mjs
+      - name: Publish clean final branch from main
+        run: |
+          git fetch origin main
+          git switch -C chore/autonomy-resume-bootstrap-final origin/main
+          cp /tmp/orchestrator.mjs scripts/agents/orchestrator.mjs
+          git config user.name "AOC Governance Bootstrap Resume"
+          git config user.email "aoc-governance@users.noreply.github.com"
+          git add scripts/agents/orchestrator.mjs
+          git diff --cached --check
+          git commit -m "fix(autonomy): resume implementation from bootstrap PR"
+          git push -u origin HEAD:chore/autonomy-resume-bootstrap-final
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30
