@@ -13,47 +13,27 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
-      - name: Collect latest autonomous failure
+      - name: Publish concise autonomy snapshot
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/autonomous-delivery.yml/runs?per_page=10" > /tmp/aoc-runs.json
           gh api "repos/${GITHUB_REPOSITORY}/issues/16/comments?per_page=100" \
-            --jq '.[-3:] | map({id,user:.user.login,created_at,updated_at,body})' > /tmp/aoc-issue16-comments.json
-          RUN_ID=$(jq -r '([.workflow_runs[] | select(.status == "completed" and .conclusion == "failure")][0].id) // .workflow_runs[0].id // empty' /tmp/aoc-runs.json)
-          if [ -z "$RUN_ID" ]; then
-            echo "No autonomous run found" > /tmp/aoc-failed.log
-          else
-            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100" > /tmp/aoc-jobs.json
-            gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed > /tmp/aoc-failed.log 2>&1 || true
-          fi
+            --jq '.[-5:] | map({id,user:.user.login,created_at,updated_at,body})' > /tmp/aoc-issue16-comments.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/autonomous-delivery.yml/runs?per_page=10" \
+            --jq '.workflow_runs | map({id,event,status,conclusion,head_branch,head_sha,run_number,created_at,updated_at,html_url})' > /tmp/aoc-runs.json
           {
             echo '<!-- AOC-AUTONOMY-DIAGNOSTIC-V3 -->'
-            echo '## Diagnostic du dernier passage autonome'
-            echo
-            echo "Run analysé : ${RUN_ID:-aucun}"
+            echo '## Diagnostic autonome concis'
             echo
             echo '### Derniers commentaires du lot 5J'
             echo '```json'
             cat /tmp/aoc-issue16-comments.json
             echo '```'
             echo
-            echo '### Exécutions récentes'
+            echo '### Dix derniers passages de l’orchestrateur'
             echo '```json'
-            jq '[.workflow_runs[] | {id,event,status,conclusion,head_branch,head_sha,run_number,created_at,updated_at,html_url}]' /tmp/aoc-runs.json
-            echo '```'
-            if [ -f /tmp/aoc-jobs.json ]; then
-              echo
-              echo '### Jobs'
-              echo '```json'
-              jq '[.jobs[] | {id,name,status,conclusion,started_at,completed_at}]' /tmp/aoc-jobs.json
-              echo '```'
-            fi
-            echo
-            echo '### Fin du journal en échec'
-            echo '```text'
-            tail -n 160 /tmp/aoc-failed.log
+            cat /tmp/aoc-runs.json
             echo '```'
           } > /tmp/aoc-diagnostic.md
-          gh issue comment 18 --repo "$GITHUB_REPOSITORY" --body-file /tmp/aoc-diagnostic.md
+          gh issue comment 93 --repo "$GITHUB_REPOSITORY" --body-file /tmp/aoc-diagnostic.md
