@@ -5,8 +5,8 @@ Le lot 5J a revele des erreurs GitHub Models 413 sur le modele gpt-4.1, dont la 
 La politique borne desormais plus strictement :
 
 - les taches d'agent a 3000 caracteres ;
-- chaque sortie d'outil a 1200 caracteres ;
+- chaque sortie d'outil a 2000 caracteres, soit le minimum accepte par le validateur d'autonomie ;
 - la requete complete a 14000 caracteres ;
 - la conversation conserve un seul round historique.
 
-Un self-test CI empeche la regression de ces limites.
+Un self-test CI empeche la regression de ces limites et verifie leur compatibilite avec la validation globale de l'autonomie.
