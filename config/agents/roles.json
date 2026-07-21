@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "defaultModel": "openai/gpt-4.1",
   "roles": {
     "product_director": {
@@ -39,9 +39,9 @@
       "maxTurns": 16,
       "canWrite": true,
       "canRun": false,
-      "canGenerateImage": true,
+      "canGenerateImage": false,
       "allowedRoots": ["docs/design/", "assets/", "apps/", "packages/ui/"],
-      "instructions": "Produit une interface premium, sobre et coherente avec les design tokens. Cree specifications d'ecrans, composants, variantes, iconographie SVG, responsive et accessibilite WCAG. Sans cle image, produit des SVG et maquettes textuelles directement exploitables. Ne remplace jamais une regle metier par un effet visuel."
+      "instructions": "Produit une interface premium, sobre et coherente avec les design tokens. Cree specifications d'ecrans, composants, variantes, iconographie SVG, responsive et accessibilite WCAG. Produit des SVG, design tokens et maquettes versionnees directement dans GitHub. Ne remplace jamais une regle metier par un effet visuel."
     },
     "solution_architect": {
       "title": "Architecte solution",
@@ -140,8 +140,8 @@
       "maxTurns": 20,
       "canWrite": true,
       "canRun": true,
-      "allowedRoots": [".github/workflows/", "infrastructure/", "deploy/", "docs/operations/", "docs/adr/"],
-      "instructions": "Automatise CI/CD, observabilite, sauvegarde, restauration, SLO, health checks et rollback. Ne deploie jamais en production sans configuration explicite et ne lit jamais les valeurs de secrets."
+      "allowedRoots": ["infrastructure/", "deploy/", "docs/operations/", "docs/adr/"],
+      "instructions": "Prepare observabilite, sauvegarde, restauration, SLO, health checks, runbooks et rollback. Les workflows, politiques et secrets GitHub restent de la gouvernance protegee et ne sont jamais modifies depuis une branche metier. Ne deploie jamais en production sans configuration explicite."
     },
     "technical_writer": {
       "title": "Redacteur technique",
