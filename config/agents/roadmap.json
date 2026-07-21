@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "project": "AOC",
+  "autoCreateIssues": true,
+  "lots": [
+    {
+      "id": "5J",
+      "slug": "auction-24h-cycles",
+      "title": "Cycles d'encheres de 24 h sur trois jours",
+      "dependsOn": ["5I"],
+      "priority": 1,
+      "autoStart": true,
+      "requiredRoles": ["product_director", "automotive_domain_expert", "ux_researcher", "ui_graphic_designer", "solution_architect", "delivery_engineer", "qa_engineer", "security_engineer", "finance_fraud_advisor", "technical_writer", "cto_reviewer"],
+      "objective": "Creer des campagnes composees de trois cycles consecutifs de 24 heures, conserver l'historique de chaque cycle, relancer automatiquement apres un cycle non attribue et basculer en achat immediat apres le troisieme cycle.",
+      "acceptanceCriteria": [
+        "Chaque cycle a son propre identifiant, ses dates, ses offres et son resultat.",
+        "Une seule campagne et un seul cycle actif existent par stock.",
+        "La relance est idempotente, transactionnelle et testee sous concurrence.",
+        "Apres le troisieme cycle non vendu, la campagne passe en achat immediat sans perdre l'historique.",
+        "La vente directe, le retrait ou l'adjudication ferment atomiquement la campagne et les garanties concernees."
+      ]
+    },
+    {
+      "id": "5K",
+      "slug": "reserve-buy-now-owner-consent",
+      "title": "Prix de reserve, achat immediat et validation du proprietaire",
+      "dependsOn": ["5J"],
+      "priority": 2,
+      "autoStart": true,
+      "requiredRoles": ["product_director", "automotive_domain_expert", "ux_researcher", "solution_architect", "delivery_engineer", "finance_fraud_advisor", "legal_compliance_advisor", "qa_engineer", "security_engineer", "technical_writer", "cto_reviewer"],
+      "objective": "Gerer les vehicules appartenant au professionnel ou a un tiers, le prix de reserve, l'achat immediat au prix autorise et l'acceptation, le refus ou la contre-proposition du proprietaire pour une offre sous reserve.",
+      "acceptanceCriteria": [
+        "Le mode de propriete et le mandant sont explicites et tenant-scoped.",
+        "L'achat immediat ferme toutes les offres concurrentes dans une transaction unique.",
+        "Une offre sous reserve ne cree jamais une vente sans consentement valide du proprietaire.",
+        "Les acceptations, refus, contre-propositions et expirations sont audites et idempotents.",
+        "Les montants, devises, commissions et garanties restent coherents dans PostgreSQL."
+      ]
+    },
+    {
+      "id": "5L",
+      "slug": "professional-public-marketplaces",
+      "title": "Marketplace professionnelle et marketplace publique",
+      "dependsOn": ["5K"],
+      "priority": 3,
+      "autoStart": true,
+      "requiredRoles": ["product_director", "automotive_domain_expert", "ux_researcher", "ui_graphic_designer", "solution_architect", "frontend_engineer", "mobile_pwa_engineer", "delivery_engineer", "growth_seo_advisor", "customer_success_operations", "qa_engineer", "security_engineer", "accessibility_performance_reviewer", "technical_writer", "cto_reviewer"],
+      "objective": "Permettre a chaque vente ou enchere de cibler les professionnels verifies, le grand public ou les deux, avec des prix, documents et donnees visibles adaptes a chaque audience.",
+      "acceptanceCriteria": [
+        "Les professionnels doivent etre verifies avant d'acceder aux surfaces reservees.",
+        "Les particuliers ne voient jamais les prix, marges ou documents strictement professionnels.",
+        "Les regles d'audience sont appliquees dans le domaine, l'API et PostgreSQL.",
+        "Les parcours web et mobile sont accessibles, responsive et marques selon le canal.",
+        "Les tests couvrent les fuites inter-audience, tenant, organisation et site."
+      ]
+    },
+    {
+      "id": "5M",
+      "slug": "vehicle-inspection-dossier",
+      "title": "Inspection et fiche vehicule complete",
+      "dependsOn": ["5L"],
+      "priority": 4,
+      "autoStart": true,
+      "requiredRoles": ["product_director", "automotive_domain_expert", "ux_researcher", "ui_graphic_designer", "solution_architect", "frontend_engineer", "mobile_pwa_engineer", "delivery_engineer", "data_analytics_engineer", "qa_engineer", "security_engineer", "accessibility_performance_reviewer", "technical_writer", "cto_reviewer"],
+      "objective": "Creer une fiche comparable aux meilleures plateformes avec caracteristiques, essai routier, inspection mecanique, carrosserie localisee, interieur, pneus, medias, controle technique, sinistres, entretien, factures, cles et passeport.",
+      "acceptanceCriteria": [
+        "Le modele d'inspection est versionne, signe par son auteur et immuable apres publication, sauf nouvelle revision.",
+        "Les defauts sont localises, classes, photographies et relies au bon actif.",
+        "Les donnees sensibles ou professionnelles sont filtrees selon l'audience.",
+        "La fiche expose clairement les elements inconnus au lieu de les presenter comme conformes.",
+        "Les tests couvrent versions, medias, documents, permissions et generation de vues publiques/pro."
+      ]
+    },
+    {
+      "id": "5N",
+      "slug": "auction-notifications-proxy-bidding",
+      "title": "Notifications d'encheres, offres automatiques et anti-sniping",
+      "dependsOn": ["5M"],
+      "priority": 5,
+      "autoStart": true,
+      "requiredRoles": ["product_director", "ux_researcher", "solution_architect", "delivery_engineer", "integration_engineer", "finance_fraud_advisor", "qa_engineer", "security_engineer", "technical_writer", "cto_reviewer"],
+      "objective": "Notifier les utilisateurs depasses, permettre une offre maximale automatique, prolonger de maniere configuree les fins d'encheres et prevenir les abus sans exposer l'identite des encherisseurs.",
+      "acceptanceCriteria": [
+        "Les notifications sont idempotentes, preferences-aware et emises par outbox.",
+        "L'offre automatique ne depasse jamais le plafond du client et respecte l'increment minimal.",
+        "L'anti-sniping prolonge une seule fois par evenement admissible sous verrou.",
+        "Les traces permettent de reconstituer chaque calcul sans reveler les plafonds concurrents.",
+        "Les tests couvrent concurrence, fuseaux horaires, retries, fraude et vie privee."
+      ]
+    },
+    {
+      "id": "5O",
+      "slug": "auction-fees-disputes-logistics",
+      "title": "Frais, litiges et logistique post-enchere",
+      "dependsOn": ["5N"],
+      "priority": 6,
+      "autoStart": false,
+      "requiredRoles": ["product_director", "automotive_domain_expert", "solution_architect", "delivery_engineer", "finance_fraud_advisor", "legal_compliance_advisor", "customer_success_operations", "qa_engineer", "security_engineer", "technical_writer", "cto_reviewer"],
+      "objective": "Planifier les frais acheteur/vendeur, la facturation, les litiges, la preuve de conformite et le transport apres attribution.",
+      "acceptanceCriteria": [
+        "Le lot ne demarre qu'apres activation explicite dans la roadmap.",
+        "Aucun engagement financier externe ou reglementaire n'est active sans human gate."
+      ]
+    }
+  ]
+}
