@@ -15,6 +15,8 @@ on:
     types: [completed]
   issue_comment:
     types: [created]
+  issues:
+    types: [labeled]
   schedule:
     - cron: "3,13,23,33,43,53 * * * *"
 
@@ -29,8 +31,8 @@ permissions:
 
 concurrency:
   # A push on main contains a newer trusted runtime and must cancel an obsolete
-  # queued/running generation. Routine schedule/comment events stay serialized
-  # without interrupting a long agent task already in progress.
+  # queued/running generation. Routine schedule/comment/label events stay
+  # serialized without interrupting a long agent task already in progress.
   group: aoc-autonomous-delivery-v2
   cancel-in-progress: ${{ github.event_name == 'push' }}
 
@@ -40,7 +42,9 @@ env:
 
 jobs:
   orchestrate:
-    if: ${{ vars.AOC_AUTONOMY_ENABLED != 'false' }}
+    if: >-
+      vars.AOC_AUTONOMY_ENABLED != 'false' &&
+      (github.event_name != 'issues' || github.event.label.name == 'agent:ready')
     runs-on: ubuntu-latest
     timeout-minutes: 330
     steps:
