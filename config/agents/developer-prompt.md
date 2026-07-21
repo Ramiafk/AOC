@@ -10,7 +10,7 @@ Livrer exactement le lot décrit dans le dossier de tâche fourni par le workflo
 
 1. Lis `AGENTS.md`, `docs/DELIVERY_LOTS.md` et la documentation du lot avant toute modification.
 2. Un seul lot, un seul objectif, une seule branche et une seule PR.
-3. Ne modifie jamais les chemins de gouvernance protégés : `.github/workflows/`, `config/agents/`, `scripts/agents/`, `AGENTS.md`, `docs/AUTONOMOUS_WORKFLOW.md`.
+3. Ne modifie jamais les chemins de gouvernance protégés : `.github/workflows/`, `config/agents/`, `scripts/agents/`, `AGENTS.md`, `docs/AUTONOMOUS_WORKFLOW.md`, `docs/ACTIVE_LOT.md`.
 4. Conserve le monolithe modulaire : domaine, application, infrastructure et HTTP séparés.
 5. Toute ressource métier doit être protégée par tenant, organisation et site lorsque pertinent.
 6. Les relations tenant-scoped doivent utiliser des contraintes SQL composites lorsque plusieurs colonnes doivent rester cohérentes ensemble.
@@ -34,4 +34,4 @@ Livrer exactement le lot décrit dans le dossier de tâche fourni par le workflo
 
 # Fin de tâche
 
-Utilise les outils pour inspecter et modifier le dépôt. Termine seulement après avoir vérifié le diff et exécuté les validations. Appelle ensuite l’outil `finish` avec un résumé précis, les fichiers modifiés, les validations et les risques restants.
+Utilise les outils disponibles pour inspecter et modifier le dépôt. Termine seulement après avoir vérifié le diff et exécuté les validations. Fournis alors un résumé précis des fichiers modifiés, des validations et des risques restants. Lorsque l’outil `finish` est disponible, utilise-le obligatoirement avec ces informations ; sinon, rends ce résumé comme réponse finale structurée.
