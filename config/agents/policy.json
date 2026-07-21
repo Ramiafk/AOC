@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "enabledByDefault": true,
+  "scheduleMinutes": 10,
+  "maxAgentTurns": 24,
+  "maxFixRoundsPerPr": 3,
+  "maxOutputCharactersPerTool": 24000,
+  "maxFileBytes": 500000,
+  "maxGeneratedImageBytes": 6000000,
+  "maxChangedFilesPerLot": 160,
+  "branchPrefix": "agent/",
+  "governanceBranchPrefix": "chore/",
+  "requiredChecks": [
+    "CI"
+  ],
+  "requiredCommands": [
+    "npm run typecheck",
+    "npm test",
+    "npm run check"
+  ],
+  "allowedCommands": [
+    "npm ci",
+    "npm run typecheck",
+    "npm test",
+    "npm run check",
+    "npm run db:migrate",
+    "git status --short",
+    "git diff --check",
+    "git diff --stat"
+  ],
+  "protectedPaths": [
+    ".git/",
+    ".github/workflows/autonomous-delivery.yml",
+    "AGENTS.md",
+    "config/agents/",
+    "scripts/agents/",
+    "docs/PRODUCT_VISION.md",
+    "docs/TECHNICAL_VISION.md",
+    "docs/AUTONOMOUS_DELIVERY.md",
+    "docs/CTO_REVIEW_PROTOCOL.md",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    ".github/ISSUE_TEMPLATE/autonomous-lot.yml"
+  ],
+  "neverCommitPatterns": [
+    ".env",
+    ".pem",
+    ".p12",
+    ".pfx",
+    "id_rsa",
+    "private_key",
+    "node_modules/",
+    "coverage/",
+    ".agent/"
+  ],
+  "secretPatterns": [
+    "-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----",
+    "sk-[A-Za-z0-9_-]{20,}",
+    "ghp_[A-Za-z0-9]{30,}",
+    "github_pat_[A-Za-z0-9_]{30,}",
+    "AKIA[0-9A-Z]{16}",
+    "AIza[0-9A-Za-z_-]{30,}",
+    "xox[baprs]-[0-9A-Za-z-]{20,}"
+  ],
+  "merge": {
+    "method": "squash",
+    "deleteBranch": true,
+    "requireExactApprovedSha": true,
+    "requireDraftUntilApproval": true,
+    "autoMergeAfterApproval": true
+  },
+  "humanGates": [
+    "production-secret-creation-or-rotation",
+    "production-deployment-first-time",
+    "destructive-data-deletion",
+    "payment-provider-contract-or-live-credentials",
+    "legal-certification-or-regulatory-filing",
+    "domain-purchase-or-external-financial-commitment"
+  ],
+  "stopConditions": [
+    "more-than-one-active-lot-pr",
+    "ambiguous-product-requirement-with-financial-or-legal-impact",
+    "three-failed-fix-rounds-on-the-same-pr",
+    "secret-detected-in-diff",
+    "migration-cannot-be-proven-safe-on-populated-data",
+    "current-pr-head-differs-from-reviewed-sha",
+    "untrusted-actor-attempts-control-command"
+  ]
+}
