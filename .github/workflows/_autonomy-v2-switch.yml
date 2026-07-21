@@ -1,0 +1,73 @@
+name: AOC Recovery V2 Switch
+
+on:
+  push:
+    branches: [chore/autonomy-model-throttle-recovery]
+
+permissions:
+  contents: write
+
+jobs:
+  switch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chore/autonomy-model-throttle-recovery
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Switch to deterministic recovery runtime
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              '.github/workflows/autonomous-delivery.yml': [
+                  ('scripts/agents/recover-transient-model-failures.mjs', 'scripts/agents/recover-transient-model-failures-v2.mjs'),
+              ],
+              '.github/workflows/ci.yml': [
+                  ('scripts/agents/recover-transient-model-failures.mjs', 'scripts/agents/recover-transient-model-failures-v2.mjs'),
+              ],
+              'scripts/agents/validate-autonomy.mjs': [
+                  ('scripts/agents/recover-transient-model-failures.mjs', 'scripts/agents/recover-transient-model-failures-v2.mjs'),
+                  ('planTransientRecoveries', 'buildRecoveryPlan'),
+                  ('isTransientModelFailure', 'transientFailure'),
+              ],
+          }
+
+          for filename, pairs in replacements.items():
+              path = Path(filename)
+              text = path.read_text()
+              for old, new in pairs:
+                  if old not in text:
+                      raise SystemExit(f'Missing expected token in {filename}: {old}')
+                  text = text.replace(old, new)
+              path.write_text(text)
+
+          for filename in [
+              'scripts/agents/recover-transient-model-failures.mjs',
+              '.github/workflows/_autonomy-recovery-debug.yml',
+              '.github/workflows/_autonomy-v2-switch.yml',
+          ]:
+              Path(filename).unlink(missing_ok=True)
+          PY
+
+          node --check scripts/agents/recover-transient-model-failures-v2.mjs
+          node scripts/agents/recover-transient-model-failures-v2.mjs --self-test
+          node --check scripts/agents/validate-autonomy.mjs
+          node scripts/agents/validate-autonomy.mjs
+
+      - name: Commit generated recovery switch
+        run: |
+          git config user.name "AOC Governance Recovery"
+          git config user.email "aoc-governance@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(autonomy): activate deterministic transient recovery v2"
+          git push origin HEAD:chore/autonomy-model-throttle-recovery
