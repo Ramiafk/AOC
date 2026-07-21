@@ -1,3 +1,4 @@
+// One-shot deterministic bootstrap. This file deletes itself after generation.
 const { readFileSync, writeFileSync } = require('node:fs');
 
 const sourcePath = 'scripts/agents/orchestrator.mjs';
