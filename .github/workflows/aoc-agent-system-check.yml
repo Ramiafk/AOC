@@ -1,0 +1,37 @@
+name: AOC Agent System Check
+
+on:
+  pull_request:
+    paths:
+      - ".agents/**"
+      - "scripts/agents/**"
+      - ".github/workflows/aoc-*.yml"
+      - "docs/AUTONOMOUS_MULTI_AGENT_SYSTEM.md"
+      - "docs/AGENT_HANDOFF_PROTOCOL.md"
+  push:
+    branches: [main]
+    paths:
+      - ".agents/**"
+      - "scripts/agents/**"
+      - ".github/workflows/aoc-*.yml"
+      - "docs/AUTONOMOUS_MULTI_AGENT_SYSTEM.md"
+      - "docs/AGENT_HANDOFF_PROTOCOL.md"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-agent-system:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate JavaScript syntax
+        run: |
+          node --check scripts/agents/runtime.mjs
+          node --check scripts/agents/orchestrator.mjs
+          node --check scripts/agents/validate.mjs
+      - name: Validate policy, roles and required files
+        run: node scripts/agents/validate.mjs
