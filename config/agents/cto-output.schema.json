@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "decision",
+    "summary",
+    "blockingFindings",
+    "recommendations",
+    "strategicIdeas",
+    "checked"
+  ],
+  "properties": {
+    "decision": {
+      "type": "string",
+      "enum": ["APPROVED_FOR_MERGE", "CHANGES_REQUIRED"]
+    },
+    "summary": { "type": "string", "minLength": 1 },
+    "blockingFindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "risk", "scenario", "requiredFix", "requiredTest", "paths"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1 },
+          "risk": { "type": "string", "minLength": 1 },
+          "scenario": { "type": "string", "minLength": 1 },
+          "requiredFix": { "type": "string", "minLength": 1 },
+          "requiredTest": { "type": "string", "minLength": 1 },
+          "paths": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "recommendations": { "type": "array", "items": { "type": "string" } },
+    "strategicIdeas": { "type": "array", "items": { "type": "string" } },
+    "checked": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "businessRules",
+        "authorization",
+        "tenantIsolation",
+        "transactions",
+        "concurrency",
+        "migrations",
+        "postgresIntegrity",
+        "tests",
+        "documentation"
+      ],
+      "properties": {
+        "businessRules": { "type": "boolean" },
+        "authorization": { "type": "boolean" },
+        "tenantIsolation": { "type": "boolean" },
+        "transactions": { "type": "boolean" },
+        "concurrency": { "type": "boolean" },
+        "migrations": { "type": "boolean" },
+        "postgresIntegrity": { "type": "boolean" },
+        "tests": { "type": "boolean" },
+        "documentation": { "type": "boolean" }
+      }
+    }
+  }
+}

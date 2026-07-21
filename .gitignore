@@ -1,9 +1,15 @@
 node_modules/
 coverage/
+dist/
 .agent/
+.agent-runtime/
+.agent-files.txt
+.policy-result.json
 .env
 .env.*
 *.pem
 *.p12
 *.pfx
+id_rsa
+private_key
 .DS_Store

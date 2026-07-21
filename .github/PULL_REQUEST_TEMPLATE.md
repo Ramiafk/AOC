@@ -2,8 +2,8 @@
 
 ## Lot
 
-- Identifiant :
-- Issue :
+- Identifiant et titre :
+- Issue de lot :
 - Branche :
 - Head SHA :
 
@@ -11,48 +11,56 @@
 
 ## Périmètre livré
 
-## Hors périmètre
+- [ ] domaine métier
+- [ ] API et autorisations
+- [ ] persistance PostgreSQL
+- [ ] migrations
+- [ ] tests
+- [ ] documentation
+- [ ] interface/expérience lorsque pertinente
 
-## Décisions techniques
+## Hors périmètre
 
 ## Sécurité
 
-- [ ] isolation tenant
-- [ ] organisation/site
-- [ ] permissions
-- [ ] validation des entrées
-- [ ] audit et données sensibles
-
-## Base de données
-
-- [ ] aucune migration
-- [ ] migration versionnée et immuable
-- [ ] base vide testée
-- [ ] upgrade peuplé testé lorsque nécessaire
-- [ ] RLS/FK/contraintes/index vérifiés
+- [ ] tenant
+- [ ] organisation
+- [ ] site
+- [ ] RLS
+- [ ] tests négatifs
+- [ ] aucune donnée sensible nouvelle
+- [ ] audiences publique/professionnelle séparées lorsque pertinentes
 
 ## Transactions et concurrence
 
-- [ ] verrou avant lectures sensibles
-- [ ] transaction atomique
-- [ ] idempotence/retry
+- [ ] verrou avant lectures métier
+- [ ] repository transaction-scoped
 - [ ] outbox atomique
-- [ ] test concurrent
+- [ ] idempotence/retry
+- [ ] test concurrent PostgreSQL
 
-## Interfaces
+## Migration
 
-- [ ] états chargement/vide/erreur
-- [ ] responsive
-- [ ] clavier/lecteur d’écran
-- [ ] audience publique/professionnelle
+- [ ] base vide
+- [ ] upgrade depuis données existantes si nécessaire
+- [ ] aucune migration historique modifiée
+- [ ] aucune fausse donnée rétroactive créée
+
+## Interfaces et design
+
+- [ ] chargement, vide et erreur
+- [ ] responsive mobile
+- [ ] clavier et lecteur d’écran
 - [ ] design tokens/marque blanche
+- [ ] données filtrées selon le rôle et l’audience
 
 ## Validation
 
-- `npm run typecheck` :
-- `npm test` :
-- `npm run check` :
+- Typecheck :
+- Tests :
+- Architecture :
 - CI :
+- SHA final :
 
 ## Rapports multi-agents
 
@@ -60,6 +68,8 @@
 
 ## Revue CTO
 
-La PR reste en brouillon jusqu’à l’approbation liée au head SHA.
+- [ ] PR en brouillon
+- [ ] aucun autre lot actif
+- [ ] décision CTO liée au head SHA requise avant fusion
 
 <!-- AOC-LOT-ISSUE: #0 -->

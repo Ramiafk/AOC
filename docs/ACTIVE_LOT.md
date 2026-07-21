@@ -1,20 +1,16 @@
-# AOC — État de livraison autonome
+# Lot autonome actif
 
-GitHub Issues, les labels, les PR et leurs SHA constituent la source de vérité dynamique. Ce fichier décrit seulement le point de reprise initial.
+## Point de reprise
 
-## Dernier lot fusionné
-
-- Lot : 5I — Garanties d’enchères
-- PR : #14
+- Dernier lot fusionné : 5I — Garanties d’enchères
 - Commit de fusion : `82e6f079b6223b61c6cb31afb9b8408d3f78f40e`
-- État : `MERGED`
+- Prochain lot planifié : 5J — Cycles d’enchères de 24 h sur trois jours
+- Issue existante : #16
+- Source de la roadmap multi-agents : `config/agents/roadmap.json`
+- Orchestration : `.github/workflows/autonomous-delivery.yml`
 
-## Prochain lot éligible
+## Source de vérité opérationnelle
 
-- Lot : 5J — Cycles d’enchères de 24 h sur trois jours
-- Dépendance : 5I fusionné
-- État initial : `READY_AFTER_GOVERNANCE_MERGE`
+Ce fichier fournit uniquement le point de départ. Après activation, les issues, labels, Pull Requests, SHA, CI et commentaires CTO signés constituent la source de vérité dynamique.
 
-## Règle
-
-Après fusion de l’infrastructure autonome, l’orchestrateur crée ou retrouve l’issue 5J, la marque `agent:ready`, puis démarre une seule branche et une seule PR.
+Une branche `agent/*` ne doit jamais modifier ce fichier ni les autres fichiers de gouvernance protégés.
