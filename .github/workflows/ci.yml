@@ -35,6 +35,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: node --check scripts/agents/agent-runtime.mjs
       - run: node --check scripts/agents/orchestrator.mjs
+      - run: node scripts/agents/orchestrator-io.selftest.mjs
       - run: node --check scripts/agents/github-models-budget.mjs
       - run: node --check scripts/agents/reconcile-issues.mjs
       - run: node scripts/agents/github-models-budget.mjs --self-test
