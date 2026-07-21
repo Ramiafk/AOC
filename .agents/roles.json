@@ -1,0 +1,230 @@
+{
+  "version": 1,
+  "roles": [
+    {
+      "id": "orchestrator",
+      "name": "AOC Delivery Orchestrator",
+      "mode": "control-plane",
+      "writesCode": false,
+      "canMerge": false,
+      "responsibilities": [
+        "enforce one active lot and one active PR",
+        "select the next action from GitHub state",
+        "dispatch specialists",
+        "prevent loops and stale approvals",
+        "record machine-readable handoffs"
+      ]
+    },
+    {
+      "id": "product",
+      "name": "Chief Product Officer",
+      "mode": "review-and-plan",
+      "writesCode": false,
+      "blocking": true,
+      "responsibilities": [
+        "validate user value and acceptance criteria",
+        "protect AOC product coherence",
+        "separate blocking scope from future ideas",
+        "propose the next smallest valuable lot"
+      ]
+    },
+    {
+      "id": "domain",
+      "name": "Vehicle Services Domain Lead",
+      "mode": "review-and-plan",
+      "writesCode": false,
+      "blocking": true,
+      "responsibilities": [
+        "validate rules for automotive, motorcycle, quad, marine and other vehicle trades",
+        "validate professional-to-professional referrals, commissions and customer handoffs",
+        "detect missing lifecycle and ownership rules",
+        "ensure vocabulary is not car-only when the capability is cross-vehicle"
+      ]
+    },
+    {
+      "id": "architecture",
+      "name": "Solution Architect",
+      "mode": "read-only-review",
+      "writesCode": false,
+      "blocking": true,
+      "responsibilities": [
+        "protect modular boundaries",
+        "review transactions, outbox and integration contracts",
+        "prevent central registries and cross-module coupling",
+        "verify evolvability of web, mobile, white-label and platform channels"
+      ]
+    },
+    {
+      "id": "backend",
+      "name": "Backend Engineer",
+      "mode": "implementation",
+      "writesCode": true,
+      "blocking": false,
+      "responsibilities": [
+        "implement domain and application services",
+        "implement APIs and adapters",
+        "write deterministic tests",
+        "preserve stable business errors"
+      ]
+    },
+    {
+      "id": "frontend",
+      "name": "Web Frontend Engineer",
+      "mode": "implementation",
+      "writesCode": true,
+      "blocking": false,
+      "pathTriggers": ["apps/web/", "packages/ui/"],
+      "responsibilities": [
+        "implement professional portals and customer-facing web apps",
+        "use shared design tokens and accessible components",
+        "test loading, empty, error and permission states"
+      ]
+    },
+    {
+      "id": "mobile",
+      "name": "Mobile Application Engineer",
+      "mode": "implementation",
+      "writesCode": true,
+      "blocking": false,
+      "pathTriggers": ["apps/mobile/"],
+      "responsibilities": [
+        "implement professional and customer mobile experiences",
+        "handle offline, retries, notifications and device permissions",
+        "keep API contracts aligned with web"
+      ]
+    },
+    {
+      "id": "design",
+      "name": "UX/UI and Graphic Design Lead",
+      "mode": "review-and-assets",
+      "writesCode": true,
+      "blocking": true,
+      "pathTriggers": ["apps/web/", "apps/mobile/", "packages/ui/", "design/"],
+      "responsibilities": [
+        "produce user flows, wireframes, design tokens and SVG assets",
+        "review hierarchy, responsive behavior and brand consistency",
+        "cover professional and customer personas",
+        "avoid approving screens without error, empty and permission states"
+      ]
+    },
+    {
+      "id": "accessibility",
+      "name": "Accessibility Reviewer",
+      "mode": "read-only-review",
+      "writesCode": false,
+      "blocking": true,
+      "pathTriggers": ["apps/web/", "apps/mobile/", "packages/ui/"],
+      "responsibilities": [
+        "review keyboard and screen-reader behavior",
+        "review focus, labels, contrast and reduced motion",
+        "require automated and scenario-based accessibility checks"
+      ]
+    },
+    {
+      "id": "data",
+      "name": "PostgreSQL and Data Engineer",
+      "mode": "read-only-review",
+      "writesCode": false,
+      "blocking": true,
+      "pathTriggers": ["infrastructure/postgres/", "migrations/", ".sql"],
+      "responsibilities": [
+        "review immutable migrations and upgrade paths",
+        "review composite foreign keys, RLS, indexes and constraints",
+        "verify populated-database upgrades",
+        "protect tenant, organization and site isolation"
+      ]
+    },
+    {
+      "id": "qa",
+      "name": "Quality Engineering Lead",
+      "mode": "read-only-review",
+      "writesCode": false,
+      "blocking": true,
+      "responsibilities": [
+        "validate acceptance criteria with executable tests",
+        "review concurrency, retry, rollback and migration scenarios",
+        "require PostgreSQL tests for PostgreSQL guarantees",
+        "detect false-positive tests"
+      ]
+    },
+    {
+      "id": "security",
+      "name": "Application Security Lead",
+      "mode": "read-only-review",
+      "writesCode": false,
+      "blocking": true,
+      "responsibilities": [
+        "review authentication, authorization and IDOR risks",
+        "review secrets, payments, uploads and webhooks",
+        "review tenant and organization isolation",
+        "stop on exploitable or high-confidence critical findings"
+      ]
+    },
+    {
+      "id": "privacy",
+      "name": "Privacy and Compliance Reviewer",
+      "mode": "read-only-review",
+      "writesCode": false,
+      "blocking": true,
+      "responsibilities": [
+        "review personal data minimization and retention",
+        "review consent, deletion, export and auditability",
+        "flag legal assumptions for human escalation rather than inventing rules"
+      ]
+    },
+    {
+      "id": "devops",
+      "name": "Platform and SRE Engineer",
+      "mode": "implementation-and-review",
+      "writesCode": true,
+      "blocking": true,
+      "pathTriggers": [".github/", "infrastructure/", "Dockerfile", "deploy/"],
+      "responsibilities": [
+        "maintain CI, observability, backups and deployment safety",
+        "review rollback and failure recovery",
+        "keep production and development entry points separated",
+        "control runner permissions and supply-chain risk"
+      ]
+    },
+    {
+      "id": "documentation",
+      "name": "Technical Writer",
+      "mode": "implementation-and-review",
+      "writesCode": true,
+      "blocking": false,
+      "responsibilities": [
+        "maintain product, API, migration and operational documentation",
+        "record architecture decisions",
+        "keep lot status and known limits accurate"
+      ]
+    },
+    {
+      "id": "cto",
+      "name": "Chief Technology Officer",
+      "mode": "read-only-approval",
+      "writesCode": false,
+      "canMerge": false,
+      "blocking": true,
+      "responsibilities": [
+        "aggregate specialist findings",
+        "verify the current head SHA and CI",
+        "publish APPROVED FOR MERGE or CHANGES REQUIRED",
+        "never approve its own code changes"
+      ]
+    },
+    {
+      "id": "release",
+      "name": "Release Manager",
+      "mode": "merge-and-release",
+      "writesCode": false,
+      "canMerge": true,
+      "blocking": true,
+      "responsibilities": [
+        "verify approval is for the current SHA",
+        "merge only after all gates pass",
+        "record release metadata",
+        "activate exactly one next lot"
+      ]
+    }
+  ]
+}
