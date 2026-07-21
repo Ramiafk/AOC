@@ -6,9 +6,58 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: autonomy-rate-limit-resilience-${{ github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
+  apply-rate-limit-resilience:
+    if: >-
+      github.event_name == 'push' &&
+      github.ref_name == 'chore/autonomy-rate-limit-resilience' &&
+      github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chore/autonomy-rate-limit-resilience
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply deterministic resilience patch
+        run: |
+          node scripts/agents/apply-rate-limit-resilience.cjs
+          node --check scripts/agents/agent-runtime.mjs
+          node --check scripts/agents/orchestrator.mjs
+          node scripts/agents/model-resilience.selftest.mjs
+      - name: Restore permanent CI and commit
+        run: |
+          git fetch origin main
+          git show origin/main:.github/workflows/ci.yml > /tmp/ci.yml
+          node <<'NODE'
+          const { readFileSync, writeFileSync } = require('node:fs');
+          let ci = readFileSync('/tmp/ci.yml', 'utf8');
+          const anchor = '      - run: node scripts/agents/orchestrator-io.selftest.mjs\n';
+          const check = '      - run: node scripts/agents/model-resilience.selftest.mjs\n';
+          if (!ci.includes(check)) {
+            if (!ci.includes(anchor)) throw new Error('Permanent CI anchor not found');
+            ci = ci.replace(anchor, anchor + check);
+          }
+          writeFileSync('.github/workflows/ci.yml', ci);
+          NODE
+          rm -f scripts/agents/apply-rate-limit-resilience.cjs
+          rm -f .github/workflows/_apply-rate-limit-resilience.yml
+          git config user.name "AOC Governance Resilience"
+          git config user.email "aoc-governance@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(autonomy): tolerate GitHub Models rate limits"
+          git push origin HEAD:chore/autonomy-rate-limit-resilience
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30
