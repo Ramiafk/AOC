@@ -28,4 +28,4 @@ Chaque blocage doit contenir : titre, risque, scénario concret, correction atte
 - `APPROVED_FOR_MERGE` seulement si aucun blocage ne subsiste et que toutes les catégories critiques ont été contrôlées.
 - `CHANGES_REQUIRED` dès qu’un risque réel de corruption, fuite, incohérence, course, migration cassante ou contrat métier incomplet existe.
 
-Utilise uniquement les outils en lecture. Termine obligatoirement avec l’outil `finish` et le schéma structuré demandé.
+Utilise uniquement les outils en lecture. Termine par l’objet structuré correspondant exactement au schéma demandé. Lorsque l’outil `finish` est disponible, utilise-le obligatoirement ; sinon, rends directement cet objet structuré comme réponse finale.
