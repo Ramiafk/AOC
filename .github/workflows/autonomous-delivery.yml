@@ -86,6 +86,12 @@ jobs:
             echo "AOC autonomy is paused: registry reconciliation completed, product-agent execution skipped."
           fi
 
+      - name: Recover bounded transient model failures
+        if: steps.control.outputs.paused != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/agents/recover-transient-model-failures.mjs
+
       - name: Run GitHub-only multi-agent orchestrator
         if: >-
           steps.control.outputs.paused != 'true' ||
