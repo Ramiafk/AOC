@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   apply-pr-first-hotfix:
@@ -19,18 +19,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: chore/autonomy-pr-first
+          fetch-depth: 0
+          persist-credentials: true
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Apply deterministic PR-first patch
+      - name: Generate corrected orchestrator
         run: |
           node scripts/agents/apply-pr-first-hotfix.cjs
           node --check scripts/agents/orchestrator.mjs
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pr-first-orchestrator
-          path: scripts/agents/orchestrator.mjs
-          retention-days: 1
+          cp scripts/agents/orchestrator.mjs /tmp/orchestrator.mjs
+      - name: Publish clean final branch from main
+        run: |
+          git fetch origin main
+          git checkout -B chore/autonomy-pr-first-final origin/main
+          cp /tmp/orchestrator.mjs scripts/agents/orchestrator.mjs
+          git config user.name "AOC Governance PR First"
+          git config user.email "aoc-governance@users.noreply.github.com"
+          git add scripts/agents/orchestrator.mjs
+          git diff --cached --check
+          git commit -m "fix(autonomy): publish branch and draft PR before planning"
+          git push --force-with-lease origin HEAD:chore/autonomy-pr-first-final
 
   verify:
     runs-on: ubuntu-latest
