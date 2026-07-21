@@ -28,13 +28,17 @@ concurrency:
   group: aoc-autonomous-delivery
   cancel-in-progress: false
 
+env:
+  NPM_CONFIG_IGNORE_SCRIPTS: "true"
+  AOC_GITHUB_ONLY: "true"
+
 jobs:
   orchestrate:
     if: ${{ vars.AOC_AUTONOMY_ENABLED != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 330
     steps:
-      - name: Checkout governance from main
+      - name: Checkout trusted governance from main
         uses: actions/checkout@v4
         with:
           ref: main
@@ -47,10 +51,10 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install trusted dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
 
-      - name: Run multi-agent orchestrator
+      - name: Run GitHub-only multi-agent orchestrator
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_MODELS_TOKEN: ${{ github.token }}
@@ -61,11 +65,9 @@ jobs:
           AOC_MODEL_CODE: ${{ vars.AOC_MODEL_CODE }}
           AOC_MODEL_FAST: ${{ vars.AOC_MODEL_FAST }}
           AOC_MODEL_DESIGN: ${{ vars.AOC_MODEL_DESIGN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          AOC_IMAGE_MODEL: ${{ vars.AOC_IMAGE_MODEL }}
         run: node scripts/agents/orchestrator.mjs
 
-      - name: Upload agent audit trail
+      - name: Upload immutable agent audit trail
         if: always()
         uses: actions/upload-artifact@v4
         with:
