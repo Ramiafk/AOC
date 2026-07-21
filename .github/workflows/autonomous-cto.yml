@@ -91,6 +91,7 @@ jobs:
           HEAD_SHA: ${{ steps.context.outputs.head_sha }}
         run: |
           mkdir -p .agent-runtime
+          git diff "$BASE_SHA...HEAD" > .agent-runtime/cto-diff.patch
           cp config/agents/cto-prompt.md .agent-runtime/cto-task.md
           {
             echo
@@ -109,6 +110,8 @@ jobs:
             echo
             echo "## Diff statistique"
             git diff --stat "$BASE_SHA...HEAD"
+            echo
+            echo "Le diff complet est disponible dans .agent-runtime/cto-diff.patch."
             echo
             echo "Analyse uniquement ce SHA. Inspecte les fichiers nécessaires avec les outils puis appelle finish."
           } >> .agent-runtime/cto-task.md
@@ -188,7 +191,8 @@ jobs:
             STATE=failure
             DESCRIPTION='Independent CTO review requires changes'
           fi
-          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" -f state="$STATE" -f context='autonomy/cto' -f description="$DESCRIPTION"
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
+            -f state="$STATE" -f context='autonomy/cto' -f description="$DESCRIPTION"
           echo "value=$DECISION" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch corrections
@@ -209,7 +213,8 @@ jobs:
           CURRENT=$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)
           test "$CURRENT" = "$SHA"
           gh pr ready "$PR_NUMBER" || true
-          gh api -X PUT "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/merge" -f merge_method=squash -f sha="$SHA" > .agent-runtime/merge.json
+          gh api -X PUT "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/merge" \
+            -f merge_method=squash -f sha="$SHA" > .agent-runtime/merge.json
           node -e "const x=require('./.agent-runtime/merge.json'); if(!x.merged) throw new Error(x.message || 'Merge failed')"
 
       - name: Start next lot only after effective merge
