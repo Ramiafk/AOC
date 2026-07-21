@@ -131,6 +131,10 @@ for (const required of [
   "schedule:",
   "workflow_run:",
   "issue_comment:",
+  "cancel-in-progress: ${{ github.event_name == 'push' }}",
+  "Read autonomous pause state",
+  "<!-- AOC-AUTONOMY-CONTROL -->",
+  "if: steps.control.outputs.paused != 'true'",
   "scripts/agents/reconcile-issues.mjs",
   "scripts/agents/orchestrator.mjs",
   "NODE_OPTIONS: \"--import=./scripts/agents/github-models-budget.mjs\"",
@@ -138,6 +142,12 @@ for (const required of [
   "AOC_GITHUB_ONLY"
 ]) {
   if (!workflow.includes(required)) throw new Error(`Autonomous workflow is missing: ${required}`);
+}
+const reconciliationIndex = workflow.indexOf("Reconcile the autonomous issue registry");
+const pauseIndex = workflow.indexOf("Read autonomous pause state");
+const orchestratorIndex = workflow.indexOf("Run GitHub-only multi-agent orchestrator");
+if (!(reconciliationIndex >= 0 && reconciliationIndex < pauseIndex && pauseIndex < orchestratorIndex)) {
+  throw new Error("Autonomous workflow must reconcile issues, read pause state, then conditionally run agents");
 }
 if (workflow.includes("OPENAI_API_KEY") || workflow.includes("api.openai.com")) throw new Error("GitHub-only workflow must not inject an external model credential");
 for (const required of [
@@ -169,4 +179,4 @@ for (const required of ["normalizedLogin", "prepareLotBranch", "refusing destruc
 if (orchestrator.includes("push\", \"origin\", \"--delete\"")) throw new Error("Orchestrator may destructively delete an orphan branch");
 if (!agents.includes("Le seul orchestrateur actif est **AOC Autonomous Delivery**")) throw new Error("AGENTS.md does not declare a single orchestrator");
 
-console.log(`Autonomy configuration valid: ${entries.length} roles, ${roadmap.lots.length} lots, bounded GitHub Models context, canonical issue registry, safe recovery, no legacy loop`);
+console.log(`Autonomy configuration valid: ${entries.length} roles, ${roadmap.lots.length} lots, bounded GitHub Models context, canonical issue registry, pause gate, stale-queue cancellation, safe recovery, no legacy loop`);
