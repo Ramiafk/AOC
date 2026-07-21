@@ -41,6 +41,7 @@ jobs:
       - run: node --check scripts/agents/recover-transient-model-failures.mjs
       - run: node --check scripts/agents/reconcile-issues.mjs
       - run: node --check scripts/agents/command-router.mjs
+      - run: node --check scripts/agents/queue-guard.mjs
       - run: node --check scripts/agents/run-progress.mjs
       - run: node --check scripts/agents/sync-active-lot-branch.mjs
       - run: node --check scripts/agents/assert-agent-production.mjs
@@ -49,6 +50,7 @@ jobs:
       - run: node scripts/agents/recover-transient-model-failures.mjs --self-test
       - run: node scripts/agents/reconcile-issues.mjs --self-test
       - run: node scripts/agents/command-router.mjs --self-test
+      - run: node scripts/agents/queue-guard.mjs --self-test
       - run: node scripts/agents/run-progress.mjs --self-test
       - run: node scripts/agents/sync-active-lot-branch.mjs --self-test
       - run: node scripts/agents/assert-agent-production.mjs --self-test
