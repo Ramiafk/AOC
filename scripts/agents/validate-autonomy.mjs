@@ -7,6 +7,8 @@ const requiredFiles = [
   "config/agents/roles.json",
   "config/agents/roadmap.json",
   "scripts/agents/agent-runtime.mjs",
+  "scripts/agents/github-models-budget.mjs",
+  "scripts/agents/reconcile-issues.mjs",
   "scripts/agents/orchestrator.mjs",
   "docs/AUTONOMOUS_DELIVERY.md",
   "docs/PRODUCT_VISION.md",
@@ -50,12 +52,19 @@ const workflow = await fs.readFile(".github/workflows/autonomous-delivery.yml", 
 const ci = await fs.readFile(".github/workflows/ci.yml", "utf8");
 const agents = await fs.readFile("AGENTS.md", "utf8");
 const runtime = await fs.readFile("scripts/agents/agent-runtime.mjs", "utf8");
+const budget = await fs.readFile("scripts/agents/github-models-budget.mjs", "utf8");
+const reconciliation = await fs.readFile("scripts/agents/reconcile-issues.mjs", "utf8");
 const orchestrator = await fs.readFile("scripts/agents/orchestrator.mjs", "utf8");
 
 if (!policy.enabledByDefault) throw new Error("Autonomous delivery must be enabled by default");
 if (policy.maxFixRoundsPerPr < 1 || policy.maxFixRoundsPerPr > 5) throw new Error("Unsafe fix round policy");
 if (policy.maxAgentTurns < 8 || policy.maxAgentTurns > 30) throw new Error("Unsafe agent turn budget");
-if (policy.maxOutputCharactersPerTool < 2000 || policy.maxOutputCharactersPerTool > 10000) throw new Error("Unsafe tool output budget");
+if (policy.maxOutputCharactersPerTool < 2000 || policy.maxOutputCharactersPerTool > 8000) throw new Error("Unsafe tool output budget");
+if (policy.maxGithubModelsRequestCharacters < 12000 || policy.maxGithubModelsRequestCharacters > 22000) throw new Error("Unsafe GitHub Models request budget");
+if (policy.maxGithubModelsResponseTokens < 400 || policy.maxGithubModelsResponseTokens > 1000) throw new Error("Unsafe GitHub Models response budget");
+if (policy.maxTaskCharacters < 2000 || policy.maxTaskCharacters > 6000) throw new Error("Unsafe task context budget");
+if (policy.maxConversationRounds < 0 || policy.maxConversationRounds > 2) throw new Error("Unsafe conversation retention budget");
+if (!policy.reconcileDuplicateIssues) throw new Error("Duplicate issue reconciliation must remain enabled");
 if (!policy.merge?.requireExactApprovedSha) throw new Error("Exact approved SHA is mandatory");
 if (!policy.merge?.requireDraftUntilApproval) throw new Error("Draft PR gate is mandatory");
 if (!Array.isArray(policy.secretPatterns) || policy.secretPatterns.length < 6) throw new Error("Secret scanning policy is incomplete");
@@ -116,16 +125,54 @@ for (const lot of roadmap.lots) {
   if (!(lot.requiredRoles || []).includes("qa_engineer")) throw new Error(`Lot ${lot.id} has no QA role`);
 }
 
-for (const required of ["models: read", "pull-requests: write", "schedule:", "workflow_run:", "issue_comment:", "scripts/agents/orchestrator.mjs", "npm ci --ignore-scripts", "AOC_GITHUB_ONLY"]) {
+for (const required of [
+  "models: read",
+  "pull-requests: write",
+  "schedule:",
+  "workflow_run:",
+  "issue_comment:",
+  "cancel-in-progress: ${{ github.event_name == 'push' }}",
+  "Read autonomous pause state",
+  "<!-- AOC-AUTONOMY-CONTROL -->",
+  "steps.control.outputs.paused != 'true' ||",
+  "startsWith(github.event.comment.body, '/agent ')",
+  "scripts/agents/reconcile-issues.mjs",
+  "scripts/agents/orchestrator.mjs",
+  "NODE_OPTIONS: \"--import=./scripts/agents/github-models-budget.mjs\"",
+  "npm ci --ignore-scripts",
+  "AOC_GITHUB_ONLY"
+]) {
   if (!workflow.includes(required)) throw new Error(`Autonomous workflow is missing: ${required}`);
 }
+const reconciliationIndex = workflow.indexOf("Reconcile the autonomous issue registry");
+const pauseIndex = workflow.indexOf("Read autonomous pause state");
+const orchestratorIndex = workflow.indexOf("Run GitHub-only multi-agent orchestrator");
+if (!(reconciliationIndex >= 0 && reconciliationIndex < pauseIndex && pauseIndex < orchestratorIndex)) {
+  throw new Error("Autonomous workflow must reconcile issues, read pause state, then conditionally run agents");
+}
 if (workflow.includes("OPENAI_API_KEY") || workflow.includes("api.openai.com")) throw new Error("GitHub-only workflow must not inject an external model credential");
-for (const required of ["npm ci --ignore-scripts", "node --check scripts/agents/agent-runtime.mjs", "node --check scripts/agents/orchestrator.mjs", "node scripts/agents/validate-autonomy.mjs", "npx --no-install tsc --noEmit"]) {
+for (const required of [
+  "npm ci --ignore-scripts",
+  "node --check scripts/agents/agent-runtime.mjs",
+  "node --check scripts/agents/orchestrator.mjs",
+  "node --check scripts/agents/github-models-budget.mjs",
+  "node --check scripts/agents/reconcile-issues.mjs",
+  "node scripts/agents/github-models-budget.mjs --self-test",
+  "node scripts/agents/reconcile-issues.mjs --self-test",
+  "node scripts/agents/validate-autonomy.mjs",
+  "npx --no-install tsc --noEmit"
+]) {
   if (!ci.includes(required)) throw new Error(`CI is missing immutable governance validation: ${required}`);
 }
 
 for (const required of ["compactMessages", "maxResponseTokens", "413", "toolOutputLimit", "GH_TOKEN: \"\""]) {
   if (!runtime.includes(required)) throw new Error(`Runtime hardening is missing: ${required}`);
+}
+for (const required of ["fitGithubModelsPayload", "maxGithubModelsRequestCharacters", "AOC-GITHUB-MODELS-BUDGET", "--self-test"]) {
+  if (!budget.includes(required)) throw new Error(`GitHub Models budget guard is missing: ${required}`);
+}
+for (const required of ["planIssueReconciliation", "AOC-AUTONOMY-DUPLICATE-LOT", "AOC-AUTONOMY-DUPLICATE-CONTROL", "not_planned", "--self-test"]) {
+  if (!reconciliation.includes(required)) throw new Error(`Issue reconciliation guard is missing: ${required}`);
 }
 for (const required of ["normalizedLogin", "prepareLotBranch", "refusing destructive replacement", "agent:blocked", "npm\", [\"ci\", \"--ignore-scripts\"]"]) {
   if (!orchestrator.includes(required)) throw new Error(`Orchestrator recovery hardening is missing: ${required}`);
@@ -133,4 +180,4 @@ for (const required of ["normalizedLogin", "prepareLotBranch", "refusing destruc
 if (orchestrator.includes("push\", \"origin\", \"--delete\"")) throw new Error("Orchestrator may destructively delete an orphan branch");
 if (!agents.includes("Le seul orchestrateur actif est **AOC Autonomous Delivery**")) throw new Error("AGENTS.md does not declare a single orchestrator");
 
-console.log(`Autonomy configuration valid: ${entries.length} roles, ${roadmap.lots.length} lots, bounded GitHub Models context, safe recovery, no legacy loop`);
+console.log(`Autonomy configuration valid: ${entries.length} roles, ${roadmap.lots.length} lots, bounded GitHub Models context, canonical issue registry, pause gate with control commands, stale-queue cancellation, safe recovery, no legacy loop`);
