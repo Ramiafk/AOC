@@ -8,19 +8,6 @@ const ROOT = process.cwd();
 const REPO = process.env.GITHUB_REPOSITORY;
 const OWNER = REPO?.split("/")[0] || "";
 const TASK_ROOT = resolve(ROOT, ".agent", "tasks");
-const AGENT_LABELS = [
-  "agent:backlog",
-  "agent:ready",
-  "agent:active",
-  "agent:dev-working",
-  "agent:cto-review",
-  "agent:changes-required",
-  "agent:approved",
-  "agent:blocked",
-  "agent:human-gate",
-  "agent:paused",
-  "agent:done"
-];
 
 function normalizedLogin(login) {
   return String(login || "").toLowerCase().replace(/^app\//, "").replace(/\[bot\]$/, "");
@@ -38,19 +25,24 @@ function registryKey(issue) {
   return lot ? `lot:${lot}` : null;
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function replacementBody(issue, key, canonicalNumber) {
   const original = String(issue.body || "");
-  if (key === "control") {
-    return original.replace(
+  const neutralized = key === "control"
+    ? original.replace(
       "<!-- AOC-AUTONOMY-CONTROL -->",
       `<!-- AOC-AUTONOMY-DUPLICATE-CONTROL:canonical-${canonicalNumber} -->`
+    )
+    : original.replace(
+      new RegExp(`AOC-AUTONOMY-LOT:${escapeRegExp(key.slice("lot:".length))}`),
+      `AOC-AUTONOMY-DUPLICATE-LOT:${key.slice("lot:".length)}:canonical-${canonicalNumber}`
     );
-  }
-  const id = key.slice("lot:".length);
-  return original.replace(
-    new RegExp(`AOC-AUTONOMY-LOT:${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
-    `AOC-AUTONOMY-DUPLICATE-LOT:${id}:canonical-${canonicalNumber}`
-  );
+
+  if (neutralized.includes("AOC-RECONCILIATION-CANONICAL:")) return neutralized;
+  return `${neutralized.trim()}\n\n---\n\nCette issue a ete neutralisee comme doublon de #${canonicalNumber}. Elle ne peut satisfaire aucune dependance de roadmap.\n\n<!-- AOC-RECONCILIATION-CANONICAL:${canonicalNumber} -->\n`;
 }
 
 export function planIssueReconciliation(issues, owner = OWNER) {
@@ -74,7 +66,7 @@ export function planIssueReconciliation(issues, owner = OWNER) {
         canonicalNumber: canonical.number,
         duplicateNumber: duplicate.number,
         replacementBody: replacementBody(duplicate, key, canonical.number),
-        close: String(duplicate.state || "").toUpperCase() === "OPEN"
+        wasOpen: String(duplicate.state || "").toUpperCase() === "OPEN"
       });
     }
   }
@@ -109,33 +101,17 @@ async function listIssues() {
   return raw ? JSON.parse(raw) : [];
 }
 
-async function patchBody(issueNumber, body) {
-  const path = resolve(TASK_ROOT, `reconcile-issue-${issueNumber}.json`);
+async function patchDuplicate(action) {
+  const path = resolve(TASK_ROOT, `reconcile-issue-${action.duplicateNumber}.json`);
+  const payload = {
+    body: action.replacementBody,
+    labels: ["agent:duplicate"],
+    state: "closed",
+    state_reason: "not_planned"
+  };
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify({ body })}\n`, "utf8");
-  await gh(["api", "--method", "PATCH", `repos/${REPO}/issues/${issueNumber}`, "--input", path]);
-}
-
-async function stripAgentLabels(issueNumber) {
-  for (const label of AGENT_LABELS) {
-    await gh(["issue", "edit", String(issueNumber), "--repo", REPO, "--remove-label", label], { allowFailure: true });
-  }
-  await gh(["issue", "edit", String(issueNumber), "--repo", REPO, "--add-label", "agent:duplicate"], { allowFailure: true });
-}
-
-async function applyAction(action) {
-  await patchBody(action.duplicateNumber, action.replacementBody);
-  await stripAgentLabels(action.duplicateNumber);
-  if (action.close) {
-    await gh([
-      "issue", "comment", String(action.duplicateNumber), "--repo", REPO,
-      "--body", `[AOC-RECONCILIATION] Doublon ferme. Source de verite : #${action.canonicalNumber}. Le marqueur machine a ete neutralise avant fermeture.`
-    ], { allowFailure: true });
-    await gh([
-      "issue", "close", String(action.duplicateNumber), "--repo", REPO,
-      "--reason", "not planned"
-    ]);
-  }
+  await writeFile(path, `${JSON.stringify(payload)}\n`, "utf8");
+  await gh(["api", "--method", "PATCH", `repos/${REPO}/issues/${action.duplicateNumber}`, "--input", path]);
 }
 
 async function realRun() {
@@ -157,8 +133,8 @@ async function realRun() {
 
   const issues = await listIssues();
   const actions = planIssueReconciliation(issues);
-  for (const action of actions) await applyAction(action);
-  console.log(`Autonomous issue reconciliation complete: ${actions.length} duplicate issue(s) neutralized`);
+  for (const action of actions) await patchDuplicate(action);
+  console.log(`Autonomous issue reconciliation complete: ${actions.length} duplicate issue(s) neutralized with ${actions.length} issue mutation(s)`);
 }
 
 function selfTest() {
@@ -172,11 +148,12 @@ function selfTest() {
   const actions = planIssueReconciliation(fixtures, "owner");
   if (actions.length !== 2) throw new Error(`Expected 2 reconciliation actions, got ${actions.length}`);
   const lotAction = actions.find(action => action.duplicateNumber === 22);
-  if (!lotAction || lotAction.canonicalNumber !== 16 || lotAction.replacementBody.includes("AOC-AUTONOMY-LOT:5J")) {
+  if (!lotAction || lotAction.canonicalNumber !== 16 || !lotAction.wasOpen || lotAction.replacementBody.includes("AOC-AUTONOMY-LOT:5J")) {
     throw new Error("Lot duplicate reconciliation is incorrect");
   }
+  if (!lotAction.replacementBody.includes("AOC-RECONCILIATION-CANONICAL:16")) throw new Error("Lot duplicate reconciliation notice is missing");
   const controlAction = actions.find(action => action.duplicateNumber === 24);
-  if (!controlAction || controlAction.canonicalNumber !== 18 || controlAction.close) {
+  if (!controlAction || controlAction.canonicalNumber !== 18 || controlAction.wasOpen) {
     throw new Error("Control duplicate reconciliation is incorrect");
   }
   console.log("Autonomous issue reconciliation self-test passed");
