@@ -1,0 +1,33 @@
+name: AOS Autonomous Policy Guard
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce one lot and protected governance paths
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pr = context.payload.pull_request;
+            if (!pr.head.ref.startsWith('agent/lot-')) return core.info('Not an autonomous lot branch');
+
+            const files = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number: pr.number, per_page: 100 });
+            const exact = new Set(['AGENTS.md', 'CODEOWNERS', '.github/PULL_REQUEST_TEMPLATE.md', 'docs/AUTONOMOUS_WORKFLOW.md']);
+            const prefixes = ['.github/workflows/', '.github/ISSUE_TEMPLATE/', 'config/agents/', 'scripts/agents/'];
+            const violations = files.map((file) => file.filename).filter((file) => exact.has(file) || prefixes.some((prefix) => file.startsWith(prefix)));
+            if (violations.length) core.setFailed(`Autonomous lot modified protected governance paths: ${violations.join(', ')}`);
+
+            const { data: pulls } = await github.rest.pulls.list({ owner, repo, state: 'open', per_page: 100 });
+            const active = pulls.filter((value) => value.head.ref.startsWith('agent/lot-'));
+            if (active.length > 1) core.setFailed(`More than one lot PR is active: ${active.map((value) => `#${value.number}`).join(', ')}`);
