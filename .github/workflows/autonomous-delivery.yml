@@ -86,9 +86,6 @@ jobs:
             --json body,number \
             --jq '[.[] | select((.body // "") | contains("<!-- AOC-AUTONOMY-CONTROL -->"))] | length > 0')
           echo "paused=$PAUSED" >> "$GITHUB_OUTPUT"
-          if [ "$PAUSED" = "true" ]; then
-            echo "AOC autonomy is paused: registry reconciliation completed, product-agent execution skipped."
-          fi
 
       - name: Recover bounded transient model failures
         if: steps.control.outputs.paused != 'true'
@@ -96,18 +93,29 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/agents/recover-transient-model-failures.mjs
 
+      - name: Synchronize active lot branch with main
+        if: steps.control.outputs.paused != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/agents/sync-active-lot-branch.mjs
+
+      - name: Capture active lot head before orchestration
+        id: before
+        if: steps.control.outputs.paused != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          HEAD=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 20 --json headRefName,headRefOid --jq '[.[] | select(.headRefName | startswith("agent/"))][0].headRefOid // ""')
+          echo "head=$HEAD" >> "$GITHUB_OUTPUT"
+
       - name: Publish orchestration start checkpoint
-        if: >-
-          steps.control.outputs.paused != 'true' ||
-          steps.command.outputs.routed == 'true'
+        if: steps.control.outputs.paused != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/agents/run-progress.mjs start
 
       - name: Run GitHub-only multi-agent orchestrator
-        if: >-
-          steps.control.outputs.paused != 'true' ||
-          steps.command.outputs.routed == 'true'
+        if: steps.control.outputs.paused != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_MODELS_TOKEN: ${{ github.token }}
@@ -119,18 +127,27 @@ jobs:
           AOC_MODEL_CODE: ${{ vars.AOC_MODEL_CODE }}
           AOC_MODEL_FAST: ${{ vars.AOC_MODEL_FAST }}
           AOC_MODEL_DESIGN: ${{ vars.AOC_MODEL_DESIGN }}
-        run: |
-          if [ "${{ steps.command.outputs.routed }}" = "true" ]; then
-            GITHUB_EVENT_NAME=workflow_dispatch GITHUB_EVENT_PATH= node scripts/agents/orchestrator.mjs
-          else
-            node scripts/agents/orchestrator.mjs
-          fi
+          GITHUB_EVENT_NAME: ${{ steps.command.outputs.routed == 'true' && 'workflow_dispatch' || github.event_name }}
+        run: node scripts/agents/orchestrator.mjs
 
-      - name: Publish orchestration finish checkpoint
-        if: always()
+      - name: Verify real agent production
+        id: watchdog
+        if: steps.control.outputs.paused != 'true'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/agents/run-progress.mjs finish
+          AOC_HEAD_BEFORE: ${{ steps.before.outputs.head }}
+        run: node scripts/agents/assert-agent-production.mjs
+
+      - name: Publish truthful orchestration finish checkpoint
+        if: always() && steps.control.outputs.paused != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/agents/run-progress.mjs finish "${{ steps.watchdog.outputs.result || 'failed' }}"
+
+      - name: Enforce production watchdog
+        if: steps.watchdog.outcome == 'failure'
+        run: exit 1
 
       - name: Upload immutable agent audit trail
         if: always()
@@ -138,5 +155,5 @@ jobs:
         with:
           name: aoc-agent-audit-${{ github.run_id }}
           path: .agent/
-          if-no-files-found: ignore
+          if-no-files-found: warn
           retention-days: 30
