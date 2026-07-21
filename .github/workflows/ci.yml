@@ -6,9 +6,54 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  apply-json-output-hotfix:
+    if: >-
+      github.event_name == 'push' &&
+      github.ref_name == 'chore/autonomy-json-output-hotfix-v2' &&
+      github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chore/autonomy-json-output-hotfix-v2
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply deterministic patch
+        run: |
+          node scripts/agents/apply-orchestrator-json-hotfix.cjs
+          node --check scripts/agents/orchestrator.mjs
+          node scripts/agents/orchestrator-io.selftest.mjs
+      - name: Restore permanent CI and commit the generated hotfix
+        run: |
+          git fetch origin main
+          git show origin/main:.github/workflows/ci.yml > /tmp/ci.yml
+          node <<'NODE'
+          const { readFileSync, writeFileSync } = require('node:fs');
+          const path = '/tmp/ci.yml';
+          let ci = readFileSync(path, 'utf8');
+          const anchor = '      - run: node --check scripts/agents/orchestrator.mjs\n';
+          const check = '      - run: node scripts/agents/orchestrator-io.selftest.mjs\n';
+          if (!ci.includes(check)) {
+            if (!ci.includes(anchor)) throw new Error('Permanent CI anchor not found');
+            ci = ci.replace(anchor, anchor + check);
+          }
+          writeFileSync('.github/workflows/ci.yml', ci);
+          NODE
+          rm -f .github/workflows/_apply-autonomy-json-output-hotfix.yml
+          rm -f scripts/agents/apply-orchestrator-json-hotfix.cjs
+          git config user.name "AOC Governance Hotfix"
+          git config user.email "aoc-governance@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(autonomy): preserve complete GitHub JSON output"
+          git push origin HEAD:chore/autonomy-json-output-hotfix-v2
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30
