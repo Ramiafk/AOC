@@ -49,9 +49,13 @@ const roadmap = JSON.parse(await fs.readFile("config/agents/roadmap.json", "utf8
 const workflow = await fs.readFile(".github/workflows/autonomous-delivery.yml", "utf8");
 const ci = await fs.readFile(".github/workflows/ci.yml", "utf8");
 const agents = await fs.readFile("AGENTS.md", "utf8");
+const runtime = await fs.readFile("scripts/agents/agent-runtime.mjs", "utf8");
+const orchestrator = await fs.readFile("scripts/agents/orchestrator.mjs", "utf8");
 
 if (!policy.enabledByDefault) throw new Error("Autonomous delivery must be enabled by default");
 if (policy.maxFixRoundsPerPr < 1 || policy.maxFixRoundsPerPr > 5) throw new Error("Unsafe fix round policy");
+if (policy.maxAgentTurns < 8 || policy.maxAgentTurns > 30) throw new Error("Unsafe agent turn budget");
+if (policy.maxOutputCharactersPerTool < 2000 || policy.maxOutputCharactersPerTool > 10000) throw new Error("Unsafe tool output budget");
 if (!policy.merge?.requireExactApprovedSha) throw new Error("Exact approved SHA is mandatory");
 if (!policy.merge?.requireDraftUntilApproval) throw new Error("Draft PR gate is mandatory");
 if (!Array.isArray(policy.secretPatterns) || policy.secretPatterns.length < 6) throw new Error("Secret scanning policy is incomplete");
@@ -119,6 +123,14 @@ if (workflow.includes("OPENAI_API_KEY") || workflow.includes("api.openai.com")) 
 for (const required of ["npm ci --ignore-scripts", "node --check scripts/agents/agent-runtime.mjs", "node --check scripts/agents/orchestrator.mjs", "node scripts/agents/validate-autonomy.mjs", "npx --no-install tsc --noEmit"]) {
   if (!ci.includes(required)) throw new Error(`CI is missing immutable governance validation: ${required}`);
 }
+
+for (const required of ["compactMessages", "maxResponseTokens", "413", "toolOutputLimit", "GH_TOKEN: \"\""]) {
+  if (!runtime.includes(required)) throw new Error(`Runtime hardening is missing: ${required}`);
+}
+for (const required of ["normalizedLogin", "prepareLotBranch", "refusing destructive replacement", "agent:blocked", "npm\", [\"ci\", \"--ignore-scripts\"]"]) {
+  if (!orchestrator.includes(required)) throw new Error(`Orchestrator recovery hardening is missing: ${required}`);
+}
+if (orchestrator.includes("push\", \"origin\", \"--delete\"")) throw new Error("Orchestrator may destructively delete an orphan branch");
 if (!agents.includes("Le seul orchestrateur actif est **AOC Autonomous Delivery**")) throw new Error("AGENTS.md does not declare a single orchestrator");
 
-console.log(`Autonomy configuration valid: ${entries.length} roles, ${roadmap.lots.length} lots, ${requiredFiles.length} required files, no legacy loop`);
+console.log(`Autonomy configuration valid: ${entries.length} roles, ${roadmap.lots.length} lots, bounded GitHub Models context, safe recovery, no legacy loop`);
