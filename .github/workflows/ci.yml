@@ -44,6 +44,7 @@ jobs:
       - run: node scripts/agents/github-models-resilience.mjs --self-test
       - run: node scripts/agents/recover-transient-model-failures.mjs --self-test
       - run: node scripts/agents/reconcile-issues.mjs --self-test
+      - run: node scripts/agents/context-budget.selftest.mjs
       - run: node scripts/agents/validate-autonomy.mjs
       - run: npx --no-install tsc --noEmit
       - run: node --test --experimental-strip-types 'packages/**/*.test.ts'
