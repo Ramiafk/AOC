@@ -8,6 +8,7 @@ on:
 permissions:
   actions: read
   contents: read
+  pull-requests: write
 
 jobs:
   verify:
@@ -48,13 +49,33 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/autonomous-delivery.yml/runs?per_page=20" \
             --jq '.workflow_runs | map({id,event,status,conclusion,head_sha,head_branch,created_at,updated_at,run_number,html_url})' \
             | tee .ci-diagnostics/autonomy-runs.json
-      - name: Upload autonomous workflow diagnostics
-        uses: actions/upload-artifact@v4
-        with:
-          name: autonomy-workflow-diagnostics-${{ github.run_id }}
-          path: .ci-diagnostics/
-          if-no-files-found: error
-          retention-days: 7
+      - name: Publish autonomous workflow diagnostics
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo '<!-- AOC-AUTONOMY-DIAGNOSTICS -->'
+            echo '## Diagnostic GitHub Actions autonome'
+            echo
+            echo '### Workflow enregistré'
+            echo '```json'
+            cat .ci-diagnostics/autonomy-workflow.json
+            echo '```'
+            echo
+            echo '### Exécutions récentes'
+            echo '```json'
+            cat .ci-diagnostics/autonomy-runs.json
+            echo '```'
+          } > .ci-diagnostics/report.md
+          EXISTING=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --jq '[.[] | select(.body | contains("AOC-AUTONOMY-DIAGNOSTICS"))] | last | .id // empty')
+          if [ -n "$EXISTING" ]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${EXISTING}" --raw-field body@=.ci-diagnostics/report.md
+          else
+            gh pr comment "$PR_NUMBER" --body-file .ci-diagnostics/report.md
+          fi
       - run: npx --no-install tsc --noEmit
       - run: node --test --experimental-strip-types 'packages/**/*.test.ts'
       - run: node --experimental-strip-types scripts/check-architecture.ts
