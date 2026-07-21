@@ -15,6 +15,11 @@ Chaque lot livre une capacité exploitable. P0 désigne le pilote, pas la limite
 | 5G — Ventes flash | Réduction temporaire configurable par fenêtre et canaux publiés, programmation unique et annulation auditable | 5A,3B | une seule vente flash cohérente est ouverte par véhicule et chaque mutation publie son outbox atomiquement |
 | 5H — Enchères véhicule | Enchère configurable, offres sérialisées, réserve et adjudication atomique | 5A,5C,3B | une seule enchère ouverte accepte des offres cohérentes et produit au plus une vente gagnante |
 | 5I — Garanties d'enchères | Autorisation idempotente, offre garantie, capture du gagnant et libération des autres garanties | 5H,3B,7 | aucune offre n'est acceptée sans garantie cohérente et chaque clôture règle atomiquement toutes les garanties ouvertes |
+| 5J — Cycles d'enchères | Campagnes de trois cycles de 24 h maximum avec relance et bascule achat immédiat | 5H,5I | chaque cycle est clôturé une fois, aucun quatrième cycle n'est possible et la bascule finale est atomique |
+| 5K — Réserve et achat immédiat | Réserve propriétaire, achat immédiat et décision sur offres inférieures | 5J,5C | aucune vente sous réserve sans décision valide et un seul achat immédiat gagnant |
+| 5L — Audiences marketplace | Espaces professionnel vérifié, public et mixte avec données et actions adaptées | 5K,1,3 | aucune fuite de données pro et seuls les profils autorisés peuvent enchérir |
+| 5M — Inspection véhicule | Fiche complète versionnée : essai routier, mécanique, carrosserie, intérieur, pneus, historique et médias | 5A,2,5L | une inspection incomplète ne peut pas être publiée et chaque défaut reste traçable |
+| 5N — Engagement enchères | Notifications, enchères automatiques, anti-sniping, déduplication et signaux fraude | 5J–5M,3B | classement déterministe, plafonds confidentiels et aucune notification en double |
 | 6 — Pièces & équipement | Catalogue, compatibilité, fournisseurs, commandes, stock, e-commerce, pose | 1,4 | boucle pièce → intervention → marge et traçabilité |
 | 7 — Finance, documents & conformité | Devis, commandes, factures, paiements, commissions, Cerfa/démarches, signature, preuve | 1,3 | chaîne documentaire et financière auditable de bout en bout |
 | 8 — Fabrique marque blanche | Design tokens, domaines, CMS/SEO, site pro, portail client, configuration PWA/app | 1–7 | une nouvelle marque est créée par configuration, sans fork |
@@ -63,4 +68,9 @@ Une réservation conserve toujours son canal d'origine (`central_marketplace`, `
 | 5F — Dossier de cession | Terminé | pièces réglementaires typées, dossier unique et demande de notification documentaire |
 | 5G — Ventes flash | Terminé | prix réduit, fenêtre et canaux configurables avec verrou, outbox, FK composites et RLS |
 | 5H — Enchères véhicule | Terminé | prix de départ, réserve, incrément, offres concurrentes et adjudication atomique |
-| 5I — Garanties d'enchères | En revue | autorisation idempotente, garantie obligatoire, capture gagnante, libération et outbox transactionnelle |
+| 5I — Garanties d'enchères | Terminé | autorisation idempotente, garantie obligatoire, capture gagnante, libération et outbox transactionnelle |
+| 5J — Cycles d'enchères | Planifié | cycles 24 h, trois relances maximum et bascule achat immédiat |
+| 5K — Réserve et achat immédiat | Planifié | réserve propriétaire et décision sur offres inférieures |
+| 5L — Audiences marketplace | Planifié | section professionnels vérifiés et section publique |
+| 5M — Inspection véhicule | Planifié | fiche complète, essai routier, défauts et historique |
+| 5N — Engagement enchères | Planifié | notifications, auto-bid, anti-sniping et fraude |
