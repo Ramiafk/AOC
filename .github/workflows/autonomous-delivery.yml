@@ -18,7 +18,7 @@ on:
   issues:
     types: [labeled]
   schedule:
-    - cron: "3,13,23,33,43,53 * * * *"
+    - cron: "17 * * * *"
 
 permissions:
   actions: write
@@ -30,8 +30,9 @@ permissions:
   statuses: read
 
 concurrency:
-  group: aoc-autonomous-delivery-v2
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  # Legacy invariant strengthened from: cancel-in-progress: ${{ github.event_name == 'push' }}
+  group: aoc-autonomous-delivery-v3
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'issue_comment' }}
 
 env:
   NPM_CONFIG_IGNORE_SCRIPTS: "true"
@@ -68,13 +69,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/agents/command-router.mjs
 
+      - name: Deduplicate and qualify autonomy event
+        id: queue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/agents/queue-guard.mjs
+
       - name: Reconcile the autonomous issue registry
+        if: steps.queue.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/agents/reconcile-issues.mjs
 
       - name: Read autonomous pause state
         id: control
+        if: steps.queue.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -88,20 +97,20 @@ jobs:
           echo "paused=$PAUSED" >> "$GITHUB_OUTPUT"
 
       - name: Recover bounded transient model failures
-        if: steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true'
+        if: steps.queue.outputs.proceed == 'true' && (steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/agents/recover-transient-model-failures.mjs
 
       - name: Synchronize active lot branch with main
-        if: steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true'
+        if: steps.queue.outputs.proceed == 'true' && (steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/agents/sync-active-lot-branch.mjs
 
       - name: Capture active lot head before orchestration
         id: before
-        if: steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true'
+        if: steps.queue.outputs.proceed == 'true' && (steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -109,13 +118,13 @@ jobs:
           echo "head=$HEAD" >> "$GITHUB_OUTPUT"
 
       - name: Publish orchestration start checkpoint
-        if: steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true'
+        if: steps.queue.outputs.proceed == 'true' && (steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/agents/run-progress.mjs start
 
       - name: Run GitHub-only multi-agent orchestrator
-        if: steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true'
+        if: steps.queue.outputs.proceed == 'true' && (steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_MODELS_TOKEN: ${{ github.token }}
@@ -132,7 +141,7 @@ jobs:
 
       - name: Verify real agent production
         id: watchdog
-        if: steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true'
+        if: steps.queue.outputs.proceed == 'true' && (steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true')
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -140,7 +149,7 @@ jobs:
         run: node scripts/agents/assert-agent-production.mjs
 
       - name: Publish truthful orchestration finish checkpoint
-        if: always() && (steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true')
+        if: always() && steps.queue.outputs.proceed == 'true' && (steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/agents/run-progress.mjs finish "${{ steps.watchdog.outputs.result || 'failed' }}"
@@ -150,7 +159,7 @@ jobs:
         run: exit 1
 
       - name: Upload immutable agent audit trail
-        if: always()
+        if: always() && steps.queue.outputs.proceed == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: aoc-agent-audit-${{ github.run_id }}
