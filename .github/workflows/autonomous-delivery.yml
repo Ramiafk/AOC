@@ -64,6 +64,12 @@ jobs:
       - name: Install trusted dependencies without lifecycle scripts
         run: npm ci --ignore-scripts
 
+      - name: Route trusted autonomy commands
+        if: github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent ')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/agents/command-router.mjs
+
       - name: Reconcile the autonomous issue registry
         env:
           GH_TOKEN: ${{ github.token }}
@@ -92,6 +98,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/agents/recover-transient-model-failures.mjs
 
+      - name: Publish orchestration start checkpoint
+        if: >-
+          steps.control.outputs.paused != 'true' ||
+          (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent '))
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/agents/run-progress.mjs start
+
       - name: Run GitHub-only multi-agent orchestrator
         if: >-
           steps.control.outputs.paused != 'true' ||
@@ -108,6 +122,12 @@ jobs:
           AOC_MODEL_FAST: ${{ vars.AOC_MODEL_FAST }}
           AOC_MODEL_DESIGN: ${{ vars.AOC_MODEL_DESIGN }}
         run: node scripts/agents/orchestrator.mjs
+
+      - name: Publish orchestration finish checkpoint
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/agents/run-progress.mjs finish
 
       - name: Upload immutable agent audit trail
         if: always()
