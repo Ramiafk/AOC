@@ -1,0 +1,9 @@
+node_modules/
+coverage/
+.agent/
+.env
+.env.*
+*.pem
+*.p12
+*.pfx
+.DS_Store
