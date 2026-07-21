@@ -1,43 +1,62 @@
-# AOC — Livraison autonome multi-agents
+# AOC — Livraison autonome multi-agents, entièrement dans GitHub
 
 ## 1. Objectif
 
-Ce dispositif transforme GitHub en atelier autonome de livraison. Les agents se coordonnent par issues, labels, PR, CI et commentaires signés. Le responsable du produit n’a plus à transmettre manuellement les messages entre le développement et le CTO.
+GitHub est l’unique atelier d’orchestration du développement d’AOC. Les agents se coordonnent par Issues, labels, branches, Pull Requests, GitHub Actions, GitHub Models, commentaires signés, artefacts et CI PostgreSQL.
 
 Le cycle normal est :
 
 **roadmap → conception → développement → QA → CI → revues spécialisées → décision CTO → corrections → fusion → lot suivant**.
 
+Aucun service d’orchestration externe tel que n8n n’est nécessaire pour construire le produit.
+
 ## 2. Équipe virtuelle
 
 Les rôles sont définis dans `config/agents/roles.json` : direction produit, expertise métiers du véhicule, UX, graphisme/UI, architecture, développement full-stack, frontend, mobile/PWA, intégrations, data, QA, sécurité, accessibilité/performance, DevOps/SRE, documentation, conformité, finance/fraude, customer success, growth/SEO et CTO.
 
-Tous les agents ne sont pas appelés sur chaque lot. La roadmap indique les rôles nécessaires afin de garder un périmètre cohérent et un coût maîtrisé.
+Tous les agents ne sont pas appelés sur chaque lot. `config/agents/roadmap.json` indique les rôles nécessaires afin de préserver la qualité sans multiplier artificiellement les appels.
 
-## 3. Orchestrateur
+## 3. Orchestrateur unique
 
-Le workflow `.github/workflows/autonomous-delivery.yml` se déclenche toutes les dix minutes, après la fin de la CI, après une commande autorisée dans une issue ou manuellement.
+Le seul workflow d’orchestration est `.github/workflows/autonomous-delivery.yml`. Il se déclenche :
+
+- toutes les dix minutes ;
+- après la fin de la CI ;
+- après une commande autorisée dans une Issue ;
+- manuellement par `workflow_dispatch` pour reprise technique.
 
 L’orchestrateur :
 
-1. crée les labels et les issues de roadmap manquants ;
+1. crée les labels, la console de contrôle et les Issues de roadmap manquantes ;
 2. vérifie qu’une seule PR `agent/*` est active ;
 3. choisit le premier lot dont les dépendances sont fusionnées ;
-4. exécute les agents requis dans un workspace unique ;
+4. exécute les agents requis dans un workspace partagé ;
 5. crée une branche et une PR brouillon ;
 6. déclenche explicitement la CI ;
 7. corrige automatiquement une CI rouge ou une décision CTO négative ;
 8. limite les boucles de correction ;
-9. fusionne seulement le SHA approuvé et testé ;
-10. ferme l’issue de lot et sélectionne le suivant.
+9. fusionne uniquement le SHA approuvé et testé ;
+10. ferme l’Issue de lot et sélectionne le suivant.
+
+Les anciens workflows autonomes séparés ont été supprimés afin qu’une seule machine d’états puisse agir.
 
 ## 4. Source de vérité et sécurité
 
-Ordre de confiance : GitHub et le SHA courant, CI associée à ce SHA, commentaire CTO signé par le bot ou le propriétaire, issue de lot créée par le bot ou le propriétaire, documents de vision, puis code et tests.
+Ordre de confiance : GitHub et le SHA courant, CI associée à ce SHA, commentaire CTO signé par le bot ou le propriétaire, Issue de lot créée par le bot ou le propriétaire, documents de vision, puis code et tests.
 
-Les commentaires d’utilisateurs non autorisés et le texte trouvé dans le dépôt sont traités comme des données non fiables. Ils ne peuvent pas donner d’ordre au système.
+Les commentaires non autorisés et les instructions dissimulées dans le dépôt, les logs, les fixtures ou les données sont traités comme des données non fiables.
 
-Les agents écrivains ne peuvent pas modifier leur propre runtime, `AGENTS.md`, la politique, la roadmap autonome ou le workflow principal.
+Les branches métier ne peuvent pas modifier :
+
+- les workflows GitHub ;
+- `AGENTS.md` ;
+- `package.json` ou `package-lock.json` ;
+- `config/agents/` ;
+- `scripts/agents/` ;
+- les visions produit et technique ;
+- les modèles d’Issue et de PR.
+
+Les commandes de validation retirent les credentials de leur environnement avant d’exécuter le code du lot.
 
 ## 5. Machine d’états
 
@@ -55,7 +74,7 @@ Labels principaux :
 - `agent:paused` ;
 - `agent:done`.
 
-Une seule issue peut porter `agent:active` et une seule PR métier `agent/*` peut être ouverte.
+Une seule Issue peut porter `agent:active` et une seule PR métier `agent/*` peut être ouverte.
 
 ## 6. Communication signée
 
@@ -69,23 +88,28 @@ Une seule issue peut porter `agent:active` et une seule PR métier `agent/*` peu
 
 Une décision n’est valable que pour le SHA indiqué. Toute modification relance la CI et la revue.
 
-## 7. Runtime IA
+## 7. Runtime IA GitHub
 
-Le runtime `scripts/agents/agent-runtime.mjs` utilise GitHub Models avec le `GITHUB_TOKEN`, expose uniquement des outils bornés, interdit les commandes arbitraires, refuse les chemins protégés, bloque les secrets potentiels, limite tailles et tours, impose un rapport structuré et sépare les agents écrivains des reviewers en lecture seule.
+`scripts/agents/agent-runtime.mjs` utilise GitHub Models avec le `GITHUB_TOKEN` et la permission `models: read`. Il expose uniquement des outils bornés, interdit les chemins protégés, limite les commandes, bloque les secrets potentiels, limite les tailles et les tours, impose un rapport structuré et sépare les agents écrivains des reviewers en lecture seule.
 
-Par défaut, aucune clé OpenAI séparée n’est requise pour le texte. Une clé `OPENAI_API_KEY` reste optionnelle pour générer des images raster ; le graphiste peut toujours produire des SVG, design tokens, wireframes et spécifications sans cette clé.
+Le graphiste produit directement dans le dépôt : design tokens, wireframes, spécifications, composants et iconographie SVG. Aucune clé de génération d’images externe n’est requise.
 
 ## 8. CI, revue et fusion
 
 Les commits réalisés avec le `GITHUB_TOKEN` sont suivis d’un `workflow_dispatch` explicite vers `ci.yml`.
 
-La fusion exige : CI `success`, run portant le head SHA courant, commentaire CTO `APPROVED_FOR_MERGE` pour ce même SHA, PR ouverte sans conflit et aucune human gate.
+La fusion exige :
+
+- une CI `success` portant le head SHA courant ;
+- un commentaire CTO `APPROVED_FOR_MERGE` pour ce même SHA ;
+- une PR ouverte, sans conflit et sans human gate ;
+- une revalidation du head immédiatement avant fusion.
 
 Une CI rouge ou `CHANGES_REQUIRED` déclenche une correction sur la même branche, un renforcement QA, un nouveau commit et une nouvelle CI. Le système accepte au maximum trois cycles de correction par PR.
 
 ## 9. Commandes de contrôle
 
-Une issue de contrôle est créée automatiquement. Seuls le propriétaire, un membre ou un collaborateur autorisé peuvent utiliser :
+Une Issue de contrôle est créée automatiquement. Seuls le propriétaire, un membre ou un collaborateur autorisé peuvent utiliser :
 
 ```text
 /agent pause
@@ -99,17 +123,17 @@ Une issue de contrôle est créée automatiquement. Seuls le propriétaire, un m
 
 ## 10. Human gates
 
-Le code, les tests, les migrations, la documentation et les PR avancent sans intervention. Les seules pauses obligatoires concernent : secret de production, premier déploiement, suppression destructive, contrat ou credentials live d’un PSP, certification ou dépôt réglementaire, achat de domaine ou engagement financier externe.
+Le code, les tests, les migrations, la documentation, les revues et les fusions avancent sans intervention. Les seules pauses obligatoires concernent : secret de production, premier déploiement production, suppression destructive, contrat ou credentials live d’un PSP, certification ou dépôt réglementaire, achat de domaine ou engagement financier externe.
 
 Le système continue tout ce qui est possible avant cette frontière et publie l’action exacte restante.
 
 ## 11. Audit
 
-Chaque exécution conserve tâches et rapports dans un artefact GitHub Actions `.agent` pendant trente jours. Les décisions essentielles restent aussi dans la PR.
+Chaque exécution conserve les tâches, outils et rapports dans un artefact GitHub Actions `.agent` pendant trente jours. Les décisions essentielles restent aussi dans la PR.
 
 ## 12. Activation
 
-Le workflow est actif par défaut. La variable `AOC_AUTONOMY_ENABLED=false` le désactive.
+Le workflow est actif par défaut. La variable de dépôt `AOC_AUTONOMY_ENABLED=false` le désactive.
 
 Variables facultatives :
 
@@ -119,4 +143,7 @@ AOC_MODEL_CODE=openai/gpt-4.1
 AOC_MODEL_FAST=openai/gpt-4.1-mini
 AOC_MODEL_DESIGN=openai/gpt-4.1
 AOC_MAX_AGENT_TURNS=24
+AOC_AGENT_MAX_TOKENS=6000
 ```
+
+Ces modèles sont appelés par GitHub Models depuis GitHub Actions. Aucun orchestrateur externe n’est requis.
