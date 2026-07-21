@@ -12,9 +12,9 @@ permissions:
 jobs:
   apply-json-output-hotfix:
     if: >-
-      github.event_name == 'push' &&
-      github.ref_name == 'chore/autonomy-json-output-hotfix-v2' &&
-      github.actor != 'github-actions[bot]'
+      github.actor != 'github-actions[bot]' &&
+      ((github.event_name == 'push' && github.ref_name == 'chore/autonomy-json-output-hotfix-v2') ||
+       (github.event_name == 'pull_request' && github.head_ref == 'chore/autonomy-json-output-hotfix-v2'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
