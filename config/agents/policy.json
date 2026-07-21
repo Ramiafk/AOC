@@ -9,6 +9,7 @@
   "maxGithubModelsResponseTokens": 800,
   "maxTaskCharacters": 4500,
   "maxConversationRounds": 1,
+  "maxGithubModelsRetryAttempts": 8,
   "modelRetryBaseMilliseconds": 15000,
   "modelRetryMaxMilliseconds": 180000,
   "modelRetryBudgetMilliseconds": 900000,
