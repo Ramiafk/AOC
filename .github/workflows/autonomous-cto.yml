@@ -113,7 +113,7 @@ jobs:
             echo
             echo "Le diff complet est disponible dans .agent-runtime/cto-diff.patch."
             echo
-            echo "Analyse uniquement ce SHA. Inspecte les fichiers nécessaires avec les outils puis appelle finish."
+            echo "Analyse uniquement ce SHA. Inspecte les fichiers nécessaires avec les outils puis termine par la décision structurée demandée."
           } >> .agent-runtime/cto-task.md
 
       - name: Produce deterministic policy rejection
@@ -159,9 +159,10 @@ jobs:
           prompt-file: .agent-runtime/cto-task.md
           output-file: .agent-runtime/cto-result.json
           output-schema-file: config/agents/cto-output.schema.json
-          sandbox: read-only
+          permission-profile: ":read-only"
           model: ${{ vars.AOS_CTO_MODEL }}
           effort: high
+          allow-bots: true
 
       - name: Review with GitHub Models fallback
         if: steps.policy.outcome == 'success' && steps.provider.outputs.codex != 'true'
