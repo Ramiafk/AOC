@@ -79,11 +79,13 @@ jobs:
             --jq '[.[] | select((.body // "") | contains("<!-- AOC-AUTONOMY-CONTROL -->"))] | length > 0')
           echo "paused=$PAUSED" >> "$GITHUB_OUTPUT"
           if [ "$PAUSED" = "true" ]; then
-            echo "AOC autonomy is paused: registry reconciliation completed, agent execution skipped."
+            echo "AOC autonomy is paused: registry reconciliation completed, product-agent execution skipped."
           fi
 
       - name: Run GitHub-only multi-agent orchestrator
-        if: steps.control.outputs.paused != 'true'
+        if: >-
+          steps.control.outputs.paused != 'true' ||
+          (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent '))
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_MODELS_TOKEN: ${{ github.token }}
