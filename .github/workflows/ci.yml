@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   apply-json-output-hotfix:
@@ -26,11 +27,30 @@ jobs:
         with:
           node-version: 24
       - name: Apply deterministic patch
+        id: patch
+        continue-on-error: true
         run: |
-          node scripts/agents/apply-orchestrator-json-hotfix.cjs
-          node --check scripts/agents/orchestrator.mjs
-          node scripts/agents/orchestrator-io.selftest.mjs
+          {
+            node scripts/agents/apply-orchestrator-json-hotfix.cjs
+            node --check scripts/agents/orchestrator.mjs
+            node scripts/agents/orchestrator-io.selftest.mjs
+          } > /tmp/autonomy-json-hotfix.log 2>&1
+      - name: Publish generator failure
+        if: steps.patch.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '<!-- AOC-JSON-HOTFIX-FAILURE -->'
+            echo '## Échec du générateur déterministe'
+            echo '```text'
+            tail -n 80 /tmp/autonomy-json-hotfix.log
+            echo '```'
+          } > /tmp/autonomy-json-hotfix-comment.md
+          gh pr comment 91 --repo "$GITHUB_REPOSITORY" --body-file /tmp/autonomy-json-hotfix-comment.md
+          exit 1
       - name: Restore permanent CI and commit the generated hotfix
+        if: steps.patch.outcome == 'success'
         run: |
           git fetch origin main
           git show origin/main:.github/workflows/ci.yml > /tmp/ci.yml
