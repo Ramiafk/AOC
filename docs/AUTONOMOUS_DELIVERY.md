@@ -20,14 +20,15 @@ Tous les agents ne sont pas appelés sur chaque lot. `config/agents/roadmap.json
 
 Le seul workflow d’orchestration est `.github/workflows/autonomous-delivery.yml`. Il se déclenche :
 
-- toutes les dix minutes ;
+- immédiatement après chaque push ou fusion dans `main` ;
+- toutes les dix minutes comme mécanisme de récupération ;
 - après la fin de la CI ;
 - après une commande autorisée dans une Issue ;
 - manuellement par `workflow_dispatch` pour reprise technique.
 
 L’orchestrateur :
 
-1. crée les labels, la console de contrôle et les Issues de roadmap manquantes ;
+1. crée les labels, la console de contrôle et les Issues de roadmap manquants ;
 2. vérifie qu’une seule PR `agent/*` est active ;
 3. choisit le premier lot dont les dépendances sont fusionnées ;
 4. exécute les agents requis dans un workspace partagé ;
@@ -90,7 +91,7 @@ Une décision n’est valable que pour le SHA indiqué. Toute modification relan
 
 ## 7. Runtime IA GitHub
 
-`scripts/agents/agent-runtime.mjs` utilise GitHub Models avec le `GITHUB_TOKEN` et la permission `models: read`. Il expose uniquement des outils bornés, interdit les chemins protégés, limite les commandes, bloque les secrets potentiels, limite les tailles et les tours, impose un rapport structuré et sépare les agents écrivains des reviewers en lecture seule.
+`scripts/agents/agent-runtime.mjs` utilise GitHub Models avec le `GITHUB_TOKEN` et la permission `models: read`. Il expose uniquement des outils bornés, interdit les chemins protégés, limite les commandes, bloque les secrets potentiels, compacte le contexte, limite les tailles et les tours, impose un rapport structuré et sépare les agents écrivains des reviewers en lecture seule.
 
 Le graphiste produit directement dans le dépôt : design tokens, wireframes, spécifications, composants et iconographie SVG. Aucune clé de génération d’images externe n’est requise.
 
@@ -142,8 +143,8 @@ AOC_MODEL_REASONING=openai/gpt-4.1
 AOC_MODEL_CODE=openai/gpt-4.1
 AOC_MODEL_FAST=openai/gpt-4.1-mini
 AOC_MODEL_DESIGN=openai/gpt-4.1
-AOC_MAX_AGENT_TURNS=24
-AOC_AGENT_MAX_TOKENS=6000
+AOC_MAX_AGENT_TURNS=20
+AOC_AGENT_MAX_TOKENS=1800
 ```
 
 Ces modèles sont appelés par GitHub Models depuis GitHub Actions. Aucun orchestrateur externe n’est requis.
