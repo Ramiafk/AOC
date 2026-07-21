@@ -160,7 +160,7 @@ for (const required of ["compactMessages", "maxResponseTokens", "413", "toolOutp
 for (const required of ["fitGithubModelsPayload", "maxGithubModelsRequestCharacters", "AOC-GITHUB-MODELS-BUDGET", "--self-test"]) {
   if (!budget.includes(required)) throw new Error(`GitHub Models budget guard is missing: ${required}`);
 }
-for (const required of ["planIssueReconciliation", "AOC-AUTONOMY-DUPLICATE-LOT", "AOC-AUTONOMY-DUPLICATE-CONTROL", "not planned", "--self-test"]) {
+for (const required of ["planIssueReconciliation", "AOC-AUTONOMY-DUPLICATE-LOT", "AOC-AUTONOMY-DUPLICATE-CONTROL", "not_planned", "--self-test"]) {
   if (!reconciliation.includes(required)) throw new Error(`Issue reconciliation guard is missing: ${required}`);
 }
 for (const required of ["normalizedLogin", "prepareLotBranch", "refusing destructive replacement", "agent:blocked", "npm\", [\"ci\", \"--ignore-scripts\"]"]) {
