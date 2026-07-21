@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "lots": [
+    {
+      "id": "5J",
+      "title": "Cycles d’enchères 24 h et relances sur trois jours",
+      "branch": "agent/lot-5j-auction-cycles",
+      "objective": "Faire fonctionner une campagne d’enchères par cycles audités de 24 heures, relancés au maximum trois fois, puis basculer automatiquement le véhicule en achat immédiat si aucune vente n’a abouti.",
+      "scope": [
+        "campagne parent et cycles enfants de 24 heures",
+        "maximum de trois cycles consécutifs",
+        "clôture et relance atomiques avec historique intégral",
+        "bascule finale en mode achat immédiat",
+        "commande idempotente exploitable par un scheduler",
+        "outbox pour ouverture, clôture, relance et bascule",
+        "tests d’horloge, concurrence, reprise et migration peuplée"
+      ],
+      "outOfScope": [
+        "achat immédiat au prix de réserve",
+        "acceptation manuelle d’une offre sous réserve",
+        "audiences professionnelle et publique",
+        "inspection véhicule détaillée"
+      ],
+      "acceptance": [
+        "un même cycle ne peut être clôturé ou relancé deux fois",
+        "aucun quatrième cycle n’est possible",
+        "l’historique des offres et cycles est conservé",
+        "la bascule achat immédiat est atomique et unique"
+      ]
+    },
+    {
+      "id": "5K",
+      "title": "Prix de réserve, achat immédiat et décision du propriétaire",
+      "branch": "agent/lot-5k-reserve-buy-now-owner-decision",
+      "objective": "Gérer les véhicules détenus par un particulier ou un tiers avec prix de réserve, achat immédiat au prix de réserve et décision traçable du propriétaire sur les offres inférieures.",
+      "scope": [
+        "propriétaire économique distinct du professionnel opérateur",
+        "prix de réserve versionné et audité",
+        "achat immédiat au prix de réserve avec verrouillage concurrent",
+        "acceptation, refus et contre-proposition d’une offre sous réserve",
+        "expiration des décisions et outbox atomique",
+        "tests de double achat, double décision et changement concurrent du prix"
+      ],
+      "outOfScope": [
+        "portail public complet",
+        "paiement final et escrow",
+        "signature du mandat de vente"
+      ],
+      "acceptance": [
+        "une vente sous la réserve n’est jamais créée sans décision valide du propriétaire",
+        "le bouton acheter maintenant ne peut produire qu’une seule vente",
+        "toute modification du prix de réserve est historisée"
+      ]
+    },
+    {
+      "id": "5L",
+      "title": "Marketplace professionnelle et marketplace publique",
+      "branch": "agent/lot-5l-marketplace-audiences",
+      "objective": "Séparer les audiences : espace réservé aux professionnels automobiles vérifiés et espace visible aux particuliers, avec visibilité et droits d’enchère configurables par campagne.",
+      "scope": [
+        "audiences professional_only, public_only et mixed",
+        "vérification du statut professionnel automobile",
+        "règles distinctes de consultation, offre et achat",
+        "masquage des données réservées aux professionnels",
+        "contrôles anti-IDOR et tests de fuite",
+        "projection publique sans identité des enchérisseurs"
+      ],
+      "outOfScope": [
+        "KYC fournisseur externe",
+        "design final des applications marque blanche",
+        "moteur de recommandation"
+      ],
+      "acceptance": [
+        "un particulier ne peut jamais accéder aux données ou actions professional_only",
+        "un professionnel non vérifié ne peut pas enchérir dans l’espace pro",
+        "la même campagne mixed applique les règles de chaque audience"
+      ]
+    },
+    {
+      "id": "5M",
+      "title": "Inspection et fiche véhicule complète",
+      "branch": "agent/lot-5m-vehicle-inspection-dossier",
+      "objective": "Produire une fiche véhicule complète et auditable comparable aux grandes plateformes : essai routier, mécanique, carrosserie, intérieur, pneus, historique, documents, photos et vidéos.",
+      "scope": [
+        "modèle d’inspection versionné avec sections configurables",
+        "essai routier et contrôles mécaniques",
+        "défauts carrosserie localisés avec gravité et médias",
+        "état intérieur, pneus, jantes, vitrages, clés et équipements",
+        "historique d’entretien, contrôle technique, sinistres et factures",
+        "score de complétude et interdiction de publication si éléments obligatoires manquent",
+        "preuve de l’inspecteur, horodatage et audit"
+      ],
+      "outOfScope": [
+        "reconnaissance d’image automatique",
+        "connecteurs d’historique externes",
+        "rendu graphique final du schéma carrosserie"
+      ],
+      "acceptance": [
+        "la fiche publiée est immuable par version",
+        "chaque défaut peut être relié à ses médias",
+        "les données sensibles diffèrent entre audience publique et pro",
+        "une inspection incomplète ne peut pas être déclarée prête"
+      ]
+    },
+    {
+      "id": "5N",
+      "title": "Notifications, enchères automatiques et anti-sniping",
+      "branch": "agent/lot-5n-auction-engagement-safety",
+      "objective": "Finaliser l’expérience d’enchère avec notifications fiables, offre maximale automatique, anti-sniping, surveillance fraude et reprise idempotente.",
+      "scope": [
+        "notification surenchéri, gagnant, perdant, réserve atteinte et achat immédiat",
+        "enchère automatique par plafond confidentiel",
+        "prolongation anti-sniping configurable",
+        "journal d’événements et préférences de notification",
+        "signaux de fraude et limitation de fréquence",
+        "outbox, retries, déduplication et tests concurrents"
+      ],
+      "outOfScope": [
+        "fournisseur SMS ou email propriétaire",
+        "modèle ML antifraude",
+        "litiges et arbitrage financier complet"
+      ],
+      "acceptance": [
+        "les plafonds d’enchère restent confidentiels",
+        "deux offres automatiques concurrentes produisent un classement déterministe",
+        "une extension anti-sniping n’est appliquée qu’une fois par événement",
+        "aucune notification n’est émise en double après retry"
+      ]
+    }
+  ]
+}
