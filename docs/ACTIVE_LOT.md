@@ -8,6 +8,7 @@
 - Issue existante : #16
 - Source de la roadmap multi-agents : `config/agents/roadmap.json`
 - Orchestration : `.github/workflows/autonomous-delivery.yml`
+- Relance opérationnelle : push contrôlé sur `main` après détection d’un événement `agent:ready` non consommé.
 
 ## Source de vérité opérationnelle
 
