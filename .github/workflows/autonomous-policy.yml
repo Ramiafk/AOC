@@ -21,11 +21,20 @@ jobs:
             const repo = context.repo.repo;
             const pr = context.payload.pull_request;
             if (!pr.head.ref.startsWith('agent/lot-')) return core.info('Not an autonomous lot branch');
+            if (pr.head.repo.full_name !== `${owner}/${repo}`) return core.setFailed('Autonomous lot PRs cannot originate from a fork');
+
+            const policyFile = await github.rest.repos.getContent({
+              owner, repo,
+              path: 'config/agents/protected-paths.json',
+              ref: pr.base.sha
+            });
+            if (Array.isArray(policyFile.data) || policyFile.data.type !== 'file') return core.setFailed('Protected-path policy is unavailable');
+            const policy = JSON.parse(Buffer.from(policyFile.data.content, policyFile.data.encoding).toString('utf8'));
 
             const files = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number: pr.number, per_page: 100 });
-            const exact = new Set(['AGENTS.md', 'CODEOWNERS', '.github/PULL_REQUEST_TEMPLATE.md', 'docs/AUTONOMOUS_WORKFLOW.md']);
-            const prefixes = ['.github/workflows/', '.github/ISSUE_TEMPLATE/', 'config/agents/', 'scripts/agents/'];
-            const violations = files.map((file) => file.filename).filter((file) => exact.has(file) || prefixes.some((prefix) => file.startsWith(prefix)));
+            const violations = files.map((file) => file.filename).filter((file) =>
+              policy.exact.includes(file) || policy.prefixes.some((prefix) => file.startsWith(prefix))
+            );
             if (violations.length) core.setFailed(`Autonomous lot modified protected governance paths: ${violations.join(', ')}`);
 
             const { data: pulls } = await github.rest.pulls.list({ owner, repo, state: 'open', per_page: 100 });
