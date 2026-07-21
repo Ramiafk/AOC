@@ -1,10 +1,10 @@
 {
-  "version": 2,
+  "version": 3,
   "enabledByDefault": true,
   "scheduleMinutes": 10,
-  "maxAgentTurns": 24,
+  "maxAgentTurns": 20,
   "maxFixRoundsPerPr": 3,
-  "maxOutputCharactersPerTool": 24000,
+  "maxOutputCharactersPerTool": 8000,
   "maxFileBytes": 500000,
   "maxGeneratedImageBytes": 6000000,
   "maxChangedFilesPerLot": 160,
