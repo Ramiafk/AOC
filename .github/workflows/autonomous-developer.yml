@@ -179,7 +179,7 @@ jobs:
             fi
             echo
             echo "# Instruction finale"
-            echo "Implémente ou corrige uniquement ce lot. Inspecte le code existant avant d’écrire. Exécute les validations et appelle finish seulement lorsque le lot est prêt pour une nouvelle revue CTO."
+            echo "Implémente ou corrige uniquement ce lot. Inspecte le code existant avant d’écrire. Exécute les validations. Si l’outil finish est disponible, utilise-le seulement lorsque le lot est prêt pour une nouvelle revue CTO ; sinon rends un résumé final structuré."
           } >> .agent-runtime/developer-task.md
 
       - name: Select agent provider
@@ -204,6 +204,7 @@ jobs:
           permission-profile: ":workspace"
           model: ${{ vars.AOS_CODEX_MODEL }}
           effort: high
+          allow-bots: true
 
       - name: Develop with GitHub Models fallback
         if: steps.provider.outputs.codex != 'true'
