@@ -88,20 +88,20 @@ jobs:
           echo "paused=$PAUSED" >> "$GITHUB_OUTPUT"
 
       - name: Recover bounded transient model failures
-        if: steps.control.outputs.paused != 'true'
+        if: steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/agents/recover-transient-model-failures.mjs
 
       - name: Synchronize active lot branch with main
-        if: steps.control.outputs.paused != 'true'
+        if: steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/agents/sync-active-lot-branch.mjs
 
       - name: Capture active lot head before orchestration
         id: before
-        if: steps.control.outputs.paused != 'true'
+        if: steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -109,13 +109,13 @@ jobs:
           echo "head=$HEAD" >> "$GITHUB_OUTPUT"
 
       - name: Publish orchestration start checkpoint
-        if: steps.control.outputs.paused != 'true'
+        if: steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/agents/run-progress.mjs start
 
       - name: Run GitHub-only multi-agent orchestrator
-        if: steps.control.outputs.paused != 'true'
+        if: steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_MODELS_TOKEN: ${{ github.token }}
@@ -132,7 +132,7 @@ jobs:
 
       - name: Verify real agent production
         id: watchdog
-        if: steps.control.outputs.paused != 'true'
+        if: steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -140,7 +140,7 @@ jobs:
         run: node scripts/agents/assert-agent-production.mjs
 
       - name: Publish truthful orchestration finish checkpoint
-        if: always() && steps.control.outputs.paused != 'true'
+        if: always() && (steps.control.outputs.paused != 'true' || steps.command.outputs.routed == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/agents/run-progress.mjs finish "${{ steps.watchdog.outputs.result || 'failed' }}"
