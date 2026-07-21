@@ -1,0 +1,137 @@
+name: AOC Recovery Finalizer
+
+on:
+  push:
+    branches: [chore/autonomy-model-throttle-recovery]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aos_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aos_test"
+          --health-interval 2s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/aos_test
+      NPM_CONFIG_IGNORE_SCRIPTS: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chore/autonomy-model-throttle-recovery
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Normalize recovery runtime and remove temporary files
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              '.github/workflows/autonomous-delivery.yml': [
+                  ('scripts/agents/recover-transient-model-failures.mjs', 'scripts/agents/recover-transient-model-failures-v2.mjs'),
+              ],
+              '.github/workflows/ci.yml': [
+                  ('scripts/agents/recover-transient-model-failures.mjs', 'scripts/agents/recover-transient-model-failures-v2.mjs'),
+              ],
+              'scripts/agents/validate-autonomy.mjs': [
+                  ('scripts/agents/recover-transient-model-failures.mjs', 'scripts/agents/recover-transient-model-failures-v2.mjs'),
+                  ('planTransientRecoveries', 'buildRecoveryPlan'),
+                  ('isTransientModelFailure', 'transientFailure'),
+              ],
+          }
+          for filename, pairs in replacements.items():
+              path = Path(filename)
+              text = path.read_text()
+              for old, new in pairs:
+                  text = text.replace(old, new)
+              path.write_text(text)
+
+          for filename in [
+              'scripts/agents/recover-transient-model-failures.mjs',
+              '.github/workflows/_autonomy-recovery-debug.yml',
+              '.github/workflows/_autonomy-v2-switch.yml',
+              '.github/workflows/_autonomy-recovery-finalize.yml',
+          ]:
+              Path(filename).unlink(missing_ok=True)
+          PY
+
+      - name: Validate final branch locally
+        run: |
+          node --check scripts/agents/agent-runtime.mjs
+          node --check scripts/agents/orchestrator.mjs
+          node scripts/agents/orchestrator-io.selftest.mjs
+          node --check scripts/agents/github-models-budget.mjs
+          node scripts/agents/github-models-budget.mjs --self-test
+          node --check scripts/agents/reconcile-issues.mjs
+          node scripts/agents/reconcile-issues.mjs --self-test
+          node --check scripts/agents/recover-transient-model-failures-v2.mjs
+          node scripts/agents/recover-transient-model-failures-v2.mjs --self-test
+          node scripts/agents/validate-autonomy.mjs
+          npx --no-install tsc --noEmit
+          node --test --experimental-strip-types 'packages/**/*.test.ts'
+          node --experimental-strip-types scripts/check-architecture.ts
+
+      - name: Commit final normalized hotfix
+        run: |
+          git config user.name "AOC Governance Finalizer"
+          git config user.email "aoc-governance@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          if ! git diff --cached --quiet; then
+            git commit -m "fix(autonomy): finalize bounded model recovery"
+            git push origin HEAD:chore/autonomy-model-throttle-recovery
+          fi
+
+      - name: Dispatch and await final CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref chore/autonomy-model-throttle-recovery
+          RUN_ID=""
+          STATUS=""
+          CONCLUSION=""
+          for _ in $(seq 1 90); do
+            DATA=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow CI --branch chore/autonomy-model-throttle-recovery --limit 30 --json databaseId,headSha,status,conclusion,event,createdAt,url)
+            RUN_ID=$(echo "$DATA" | jq -r --arg sha "$SHA" '[.[] | select(.headSha == $sha and .event == "workflow_dispatch")][0].databaseId // empty')
+            if [ -n "$RUN_ID" ]; then
+              STATUS=$(echo "$DATA" | jq -r --argjson id "$RUN_ID" '[.[] | select(.databaseId == $id)][0].status // empty')
+              CONCLUSION=$(echo "$DATA" | jq -r --argjson id "$RUN_ID" '[.[] | select(.databaseId == $id)][0].conclusion // empty')
+              if [ "$STATUS" = "completed" ]; then break; fi
+            fi
+            sleep 10
+          done
+          {
+            echo '<!-- AOC-RECOVERY-FINAL-CI -->'
+            echo '## Validation finale du hotfix de récupération'
+            echo
+            echo "- Commit : \`$SHA\`"
+            echo "- CI run : \`${RUN_ID:-introuvable}\`"
+            echo "- Statut : \`${STATUS:-inconnu}\`"
+            echo "- Conclusion : \`${CONCLUSION:-inconnue}\`"
+          } > /tmp/recovery-final.md
+          gh pr comment 94 --repo "$GITHUB_REPOSITORY" --body-file /tmp/recovery-final.md
+          test "$STATUS" = "completed"
+          test "$CONCLUSION" = "success"
