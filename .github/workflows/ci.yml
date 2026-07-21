@@ -42,12 +42,16 @@ jobs:
       - run: node --check scripts/agents/reconcile-issues.mjs
       - run: node --check scripts/agents/command-router.mjs
       - run: node --check scripts/agents/run-progress.mjs
+      - run: node --check scripts/agents/sync-active-lot-branch.mjs
+      - run: node --check scripts/agents/assert-agent-production.mjs
       - run: node scripts/agents/github-models-budget.mjs --self-test
       - run: node scripts/agents/github-models-resilience.mjs --self-test
       - run: node scripts/agents/recover-transient-model-failures.mjs --self-test
       - run: node scripts/agents/reconcile-issues.mjs --self-test
       - run: node scripts/agents/command-router.mjs --self-test
       - run: node scripts/agents/run-progress.mjs --self-test
+      - run: node scripts/agents/sync-active-lot-branch.mjs --self-test
+      - run: node scripts/agents/assert-agent-production.mjs --self-test
       - run: node scripts/agents/context-budget.selftest.mjs
       - run: node scripts/agents/validate-autonomy.mjs
       - run: npx --no-install tsc --noEmit
