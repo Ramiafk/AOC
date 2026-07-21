@@ -30,6 +30,7 @@ permissions:
   statuses: read
 
 concurrency:
+  # Legacy invariant strengthened from: cancel-in-progress: ${{ github.event_name == 'push' }}
   group: aoc-autonomous-delivery-v3
   cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'issue_comment' }}
 
