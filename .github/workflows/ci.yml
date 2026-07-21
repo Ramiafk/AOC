@@ -1,4 +1,5 @@
 name: CI
+# Temporary bootstrap job; the generator restores the permanent CI before committing.
 
 on:
   push:
