@@ -7,7 +7,11 @@ const DEFAULT_POLICY = {
   maxGithubModelsRequestCharacters: 18000,
   maxGithubModelsResponseTokens: 800,
   maxTaskCharacters: 4500,
-  maxConversationRounds: 1
+  maxConversationRounds: 1,
+  maxGithubModelsRetryAttempts: 8,
+  modelRetryBaseMilliseconds: 15000,
+  modelRetryMaxMilliseconds: 180000,
+  modelRetryBudgetMilliseconds: 900000
 };
 
 async function loadPolicy() {
@@ -21,6 +25,7 @@ async function loadPolicy() {
 
 const POLICY = await loadPolicy();
 const PATCH_MARKER = Symbol.for("aoc.githubModelsBudgetInstalled");
+let modelRetryWaitSpent = 0;
 
 function truncateText(value, maximum) {
   if (typeof value !== "string") return value;
@@ -135,6 +140,64 @@ function isGithubModelsRequest(input) {
   return typeof value === "string" && value.includes("models.github.ai/");
 }
 
+function isTransientGithubModelsStatus(status) {
+  return [429, 502, 503, 504].includes(Number(status));
+}
+
+export function parseRetryAfterMilliseconds(response, now = Date.now()) {
+  const retryAfter = response?.headers?.get?.("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1000);
+    const date = Date.parse(retryAfter);
+    if (Number.isFinite(date)) return Math.max(0, date - now);
+  }
+  const reset = Number(response?.headers?.get?.("x-ratelimit-reset"));
+  if (Number.isFinite(reset) && reset > 0) return Math.max(0, (reset * 1000) - now);
+  return 0;
+}
+
+export function computeGithubModelsRetryDelay(attempt, response, options = {}) {
+  const base = Number(options.base ?? POLICY.modelRetryBaseMilliseconds) || 15000;
+  const maximum = Number(options.maximum ?? POLICY.modelRetryMaxMilliseconds) || 180000;
+  const random = typeof options.random === "function" ? options.random : Math.random;
+  const exponential = Math.min(maximum, base * (2 ** Math.max(0, Number(attempt) - 1)));
+  const serverDelay = Math.min(maximum, parseRetryAfterMilliseconds(response, options.now ?? Date.now()));
+  const jitter = Math.floor(Math.max(0, Math.min(1, Number(random()))) * Math.min(1500, Math.max(250, exponential * 0.1)));
+  return Math.min(maximum, Math.max(exponential, serverDelay) + jitter);
+}
+
+function sleep(milliseconds) {
+  return new Promise(resolvePromise => setTimeout(resolvePromise, milliseconds));
+}
+
+async function cancelResponseBody(response) {
+  try {
+    await response?.body?.cancel?.();
+  } catch {}
+}
+
+async function fetchGithubModelsWithRetry(originalFetch, input, init) {
+  const maximumAttempts = Math.max(1, Number(POLICY.maxGithubModelsRetryAttempts) || 8);
+  const waitBudget = Math.max(0, Number(POLICY.modelRetryBudgetMilliseconds) || 900000);
+  let response;
+  for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+    response = await originalFetch(input, init);
+    if (!isTransientGithubModelsStatus(response.status)) return response;
+    if (attempt >= maximumAttempts) return response;
+    const delay = computeGithubModelsRetryDelay(attempt, response);
+    if (modelRetryWaitSpent + delay > waitBudget) {
+      console.warn(`[AOC-GITHUB-MODELS-RETRY] wait budget exhausted after ${modelRetryWaitSpent} ms; returning status ${response.status}`);
+      return response;
+    }
+    modelRetryWaitSpent += delay;
+    console.warn(`[AOC-GITHUB-MODELS-RETRY] status ${response.status}; attempt ${attempt}/${maximumAttempts}; waiting ${delay} ms; spent ${modelRetryWaitSpent}/${waitBudget} ms`);
+    await cancelResponseBody(response);
+    await sleep(delay);
+  }
+  return response;
+}
+
 export function installGithubModelsBudget() {
   if (globalThis[PATCH_MARKER]) return;
   if (typeof globalThis.fetch !== "function") throw new Error("Global fetch is unavailable; GitHub Models budget cannot be installed");
@@ -151,7 +214,7 @@ export function installGithubModelsBudget() {
     if (fitted.finalCharacters !== fitted.originalCharacters) {
       console.log(`[AOC-GITHUB-MODELS-BUDGET] request ${fitted.originalCharacters} -> ${fitted.finalCharacters} chars; pass ${fitted.pass}`);
     }
-    return originalFetch(input, { ...init, body: fitted.serialized });
+    return fetchGithubModelsWithRetry(originalFetch, input, { ...init, body: fitted.serialized });
   };
   globalThis[PATCH_MARKER] = true;
 }
@@ -166,14 +229,21 @@ function selfTest() {
       { role: "assistant", content: "A".repeat(7000), tool_calls: [{ id: "1", type: "function", function: { name: "read_file", arguments: "{}" } }] },
       { role: "tool", tool_call_id: "1", content: "T".repeat(14000) }
     ],
-    tools: [{ type: "function", function: { name: "read_file", description: "D".repeat(3000), parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] } } }]
+    tools: [{ type: "function", function: { name: "read_file", description: "D".repeat(3000), parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] } }]
   };
   const fitted = fitGithubModelsPayload(huge);
   if (fitted.finalCharacters > Number(POLICY.maxGithubModelsRequestCharacters)) throw new Error("Self-test exceeded request budget");
   if (fitted.payload.max_tokens > Number(POLICY.maxGithubModelsResponseTokens)) throw new Error("Self-test exceeded response budget");
   if (fitted.payload.tools?.[0]?.function?.name !== "read_file") throw new Error("Self-test lost tool identity");
   if (fitted.payload.messages[0]?.role !== "system" || fitted.payload.messages[1]?.role !== "user") throw new Error("Self-test lost base messages");
-  console.log(`GitHub Models budget self-test passed: ${fitted.originalCharacters} -> ${fitted.finalCharacters} chars`);
+
+  const numericResponse = { headers: { get: name => name === "retry-after" ? "12" : null } };
+  if (parseRetryAfterMilliseconds(numericResponse, 1000) !== 12000) throw new Error("Numeric Retry-After parsing failed");
+  const dateResponse = { headers: { get: name => name === "retry-after" ? new Date(61000).toUTCString() : null } };
+  if (parseRetryAfterMilliseconds(dateResponse, 1000) !== 60000) throw new Error("Date Retry-After parsing failed");
+  const delay = computeGithubModelsRetryDelay(2, numericResponse, { base: 1000, maximum: 10000, now: 1000, random: () => 0 });
+  if (delay !== 10000) throw new Error(`Retry delay calculation failed: ${delay}`);
+  console.log(`GitHub Models budget self-test passed: ${fitted.originalCharacters} -> ${fitted.finalCharacters} chars; retry delay ${delay} ms`);
 }
 
 const direct = process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
