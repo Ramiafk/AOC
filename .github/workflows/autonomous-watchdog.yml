@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
-  issues: read
+  issues: write
   actions: write
   statuses: read
 
@@ -35,6 +35,25 @@ jobs:
             const { data: pulls } = await github.rest.pulls.list({ owner, repo, state: 'open', per_page: 100 });
             const pr = pulls.find((value) => value.head.ref.startsWith('agent/lot-'));
             if (!pr) {
+              const developerRuns = await github.rest.actions.listWorkflowRuns({
+                owner, repo, workflow_id: 'autonomous-developer.yml', status: 'completed', per_page: 10
+              });
+              let consecutiveFailures = 0;
+              for (const run of developerRuns.data.workflow_runs) {
+                if (run.conclusion === 'success') break;
+                if (['failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure'].includes(run.conclusion)) consecutiveFailures += 1;
+              }
+              if (consecutiveFailures >= 3) {
+                const title = '[AUTONOMY BLOCKED] Trois échecs développeur consécutifs sans PR';
+                const openIssues = await github.rest.issues.listForRepo({ owner, repo, state: 'open', per_page: 100 });
+                if (!openIssues.data.some((issue) => issue.title === title)) {
+                  await github.rest.issues.create({
+                    owner, repo, title,
+                    body: `La boucle a été arrêtée automatiquement après ${consecutiveFailures} exécutions développeur consécutives sans PR exploitable. Les logs GitHub Actions constituent la source de diagnostic. Aucun nouveau lot ne sera relancé tant qu’un run développeur n’aura pas réussi ou que la gouvernance n’aura pas été corrigée.`
+                  });
+                }
+                return core.warning(`Safety stop after ${consecutiveFailures} consecutive developer failures`);
+              }
               await github.rest.actions.createWorkflowDispatch({
                 owner, repo, workflow_id: 'autonomous-next-lot.yml', ref: 'main',
                 inputs: { previous_pr: '' }
