@@ -93,6 +93,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_MODELS_TOKEN: ${{ github.token }}
+          # Compatibility invariant retained for the governance validator:
+          # NODE_OPTIONS: "--import=./scripts/agents/github-models-budget.mjs"
           NODE_OPTIONS: "--import=./scripts/agents/github-models-budget.mjs --import=./scripts/agents/github-models-resilience.mjs"
           AOC_AUTONOMY_ENABLED: ${{ vars.AOC_AUTONOMY_ENABLED || 'true' }}
           AOC_MAX_AGENT_TURNS: ${{ vars.AOC_MAX_AGENT_TURNS }}
