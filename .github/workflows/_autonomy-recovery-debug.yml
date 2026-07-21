@@ -1,0 +1,36 @@
+name: AOC Recovery Debug
+
+on:
+  push:
+    branches: [chore/autonomy-model-throttle-recovery]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run and publish recovery self-test
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          node scripts/agents/recover-transient-model-failures.mjs --self-test > /tmp/recovery-selftest.log 2>&1
+          STATUS=$?
+          {
+            echo '<!-- AOC-RECOVERY-SELFTEST-DEBUG -->'
+            echo '## Transient recovery self-test'
+            echo
+            echo "Exit code: $STATUS"
+            echo '```text'
+            cat /tmp/recovery-selftest.log
+            echo '```'
+          } > /tmp/recovery-selftest.md
+          gh pr comment 94 --repo "$GITHUB_REPOSITORY" --body-file /tmp/recovery-selftest.md
+          exit "$STATUS"
