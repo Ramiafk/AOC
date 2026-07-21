@@ -1,4 +1,4 @@
-// One-shot deterministic bootstrap. This file deletes itself after generation.
+// One-shot deterministic bootstrap, revision 3. This file deletes itself after generation.
 const { readFileSync, writeFileSync } = require('node:fs');
 
 const sourcePath = 'scripts/agents/orchestrator.mjs';
@@ -14,18 +14,18 @@ replaceOnce(
   `    let stdout = "";
     let stderr = "";
     if (options.capture !== false) {
-      child.stdout.on("data", chunk => { stdout = truncate(\`${'${stdout}${chunk}'}\`, options.limit || 100000); });
-      child.stderr.on("data", chunk => { stderr = truncate(\`${'${stderr}${chunk}'}\`, options.limit || 100000); });
+      child.stdout.on("data", chunk => { stdout = truncate(\`${stdout}${chunk}\`, options.limit || 100000); });
+      child.stderr.on("data", chunk => { stderr = truncate(\`${stderr}${chunk}\`, options.limit || 100000); });
     }`,
   `    let stdout = "";
     let stderr = "";
     let outputError = null;
     const limit = Number(options.limit ?? 100000);
     const append = (current, chunk, stream) => {
-      const next = \`${'${current}${chunk}'}\`;
+      const next = \`${current}${chunk}\`;
       if (options.truncate === false) {
         if (next.length > limit) {
-          outputError = new Error(\`${'${command} ${stream}'} exceeded ${'${limit}'} characters\`);
+          outputError = new Error(\`${command} ${stream} exceeded ${limit} characters\`);
           child.kill("SIGKILL");
           return current;
         }
@@ -66,7 +66,7 @@ async function ghJson(args, options = {}) {
     return JSON.parse(output);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(\`Invalid JSON from gh ${'${args.slice(0, 6).join(" ")}'} (${'${output.length}'} chars): ${'${message}'}\`);
+    throw new Error(\`Invalid JSON from gh ${args.slice(0, 6).join(" ")} (${output.length} chars): ${message}\`);
   }
 }`
 );
