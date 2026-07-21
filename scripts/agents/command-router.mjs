@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { appendFile, readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -35,6 +35,11 @@ async function gh(args) {
   await execFileAsync("gh", args, { env: process.env, maxBuffer: 8 * 1024 * 1024 });
 }
 
+async function setOutput(name, value) {
+  if (!process.env.GITHUB_OUTPUT) return;
+  await appendFile(process.env.GITHUB_OUTPUT, `${name}=${value}\n`, "utf8");
+}
+
 async function findControlIssue() {
   const issues = await ghJson(["issue", "list", "--repo", REPO, "--state", "open", "--limit", "100", "--json", "number,body,labels"]);
   return (issues || []).find(issue => String(issue.body || "").includes(CONTROL_MARKER)) || null;
@@ -47,15 +52,12 @@ async function editLabels(number, add = [], remove = []) {
   if (add.length || remove.length) await gh(args);
 }
 
-async function dispatchFollowUp(reason) {
-  await gh(["workflow", "run", "autonomous-delivery.yml", "--repo", REPO, "--ref", "main", "-f", `reason=${reason}`]);
-}
-
 async function comment(number, body) {
   await gh(["issue", "comment", String(number), "--repo", REPO, "--body", body]);
 }
 
 async function route() {
+  await setOutput("routed", "false");
   if (EVENT_NAME !== "issue_comment" || !EVENT_PATH || !REPO) return;
   const event = JSON.parse(await readFile(EVENT_PATH, "utf8"));
   const command = parseAgentCommand(event.comment?.body);
@@ -68,15 +70,17 @@ async function route() {
 
   if (command.action === "resume") {
     await editLabels(control.number, [], ["agent:paused", "agent:blocked"]);
-    if (!sourceIsControl) await comment(sourceIssue, `[AOC-COMMAND-ROUTER] Commande recue pour le lot ${command.lotId || "actif"}. La console #${control.number} a ete reactivee.`);
-    await dispatchFollowUp(`resume-${command.lotId || "active"}`);
+    if (!sourceIsControl) await comment(sourceIssue, `[AOC-COMMAND-ROUTER] Commande recue pour le lot ${command.lotId || "actif"}. Reprise immediate dans le run courant.`);
+    await setOutput("routed", "true");
+    await setOutput("action", "resume");
     return;
   }
 
   if (command.action === "retry") {
     await editLabels(control.number, [], ["agent:blocked"]);
-    if (!sourceIsControl) await comment(sourceIssue, `[AOC-COMMAND-ROUTER] Nouvelle tentative demandee pour le lot ${command.lotId || "actif"}.`);
-    await dispatchFollowUp(`retry-${command.lotId || "active"}`);
+    if (!sourceIsControl) await comment(sourceIssue, `[AOC-COMMAND-ROUTER] Nouvelle tentative demandee pour le lot ${command.lotId || "actif"}. Reprise immediate dans le run courant.`);
+    await setOutput("routed", "true");
+    await setOutput("action", "retry");
   }
 }
 
