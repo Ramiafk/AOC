@@ -134,7 +134,8 @@ for (const required of [
   "cancel-in-progress: ${{ github.event_name == 'push' }}",
   "Read autonomous pause state",
   "<!-- AOC-AUTONOMY-CONTROL -->",
-  "if: steps.control.outputs.paused != 'true'",
+  "steps.control.outputs.paused != 'true' ||",
+  "startsWith(github.event.comment.body, '/agent ')",
   "scripts/agents/reconcile-issues.mjs",
   "scripts/agents/orchestrator.mjs",
   "NODE_OPTIONS: \"--import=./scripts/agents/github-models-budget.mjs\"",
@@ -179,4 +180,4 @@ for (const required of ["normalizedLogin", "prepareLotBranch", "refusing destruc
 if (orchestrator.includes("push\", \"origin\", \"--delete\"")) throw new Error("Orchestrator may destructively delete an orphan branch");
 if (!agents.includes("Le seul orchestrateur actif est **AOC Autonomous Delivery**")) throw new Error("AGENTS.md does not declare a single orchestrator");
 
-console.log(`Autonomy configuration valid: ${entries.length} roles, ${roadmap.lots.length} lots, bounded GitHub Models context, canonical issue registry, pause gate, stale-queue cancellation, safe recovery, no legacy loop`);
+console.log(`Autonomy configuration valid: ${entries.length} roles, ${roadmap.lots.length} lots, bounded GitHub Models context, canonical issue registry, pause gate with control commands, stale-queue cancellation, safe recovery, no legacy loop`);
