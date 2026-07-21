@@ -12,6 +12,9 @@ const decision = data.decision;
 if (!["APPROVED_FOR_MERGE", "CHANGES_REQUIRED"].includes(decision)) throw new Error(`Invalid decision: ${decision}`);
 if (decision === "APPROVED_FOR_MERGE" && data.blockingFindings?.length) throw new Error("Approved result cannot contain blocking findings");
 if (decision === "CHANGES_REQUIRED" && !data.blockingFindings?.length) throw new Error("Changes-required result must contain at least one blocking finding");
+const requiredChecks = ["businessRules", "authorization", "tenantIsolation", "transactions", "concurrency", "migrations", "postgresIntegrity", "tests", "documentation"];
+if (!data.checked || requiredChecks.some((key) => typeof data.checked[key] !== "boolean")) throw new Error("CTO result has an incomplete checked section");
+if (decision === "APPROVED_FOR_MERGE" && requiredChecks.some((key) => data.checked[key] !== true)) throw new Error("Approved result must confirm every mandatory CTO control");
 
 const lines = [
   `<!-- AOS_AUTONOMY_CTO sha=${args.sha} decision=${decision} -->`,
