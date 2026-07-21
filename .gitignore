@@ -1,0 +1,10 @@
+node_modules/
+coverage/
+dist/
+.env
+.env.*
+
+# Runtime temporaire des agents GitHub Actions
+.agent-runtime/
+.agent-files.txt
+.policy-result.json

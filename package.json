@@ -2,14 +2,17 @@
   "name": "aos-platform",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "test": "node --test --experimental-strip-types 'packages/**/*.test.ts'",
-    "check": "node --experimental-strip-types scripts/check-architecture.ts",
+    "check": "node --experimental-strip-types scripts/check-architecture.ts && node scripts/agents/validate-autonomy.mjs",
     "typecheck": "tsc --noEmit",
     "start:api": "NODE_ENV=production node --experimental-strip-types apps/api/src/server.ts",
-    "start:dev": "node --experimental-strip-types apps/api/src/development-server.ts"
-    ,"db:migrate": "node --experimental-strip-types infrastructure/postgres/migrate.ts"
+    "start:dev": "node --experimental-strip-types apps/api/src/development-server.ts",
+    "db:migrate": "node --experimental-strip-types infrastructure/postgres/migrate.ts",
+    "agent:validate": "node scripts/agents/validate-autonomy.mjs"
   },
   "dependencies": {
     "fastify": "5.6.2",
