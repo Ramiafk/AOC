@@ -1,0 +1,61 @@
+name: Capture autonomy blocker
+
+on:
+  push:
+    branches: [chore/autonomy-blocker-diagnostics]
+
+permissions:
+  actions: read
+  contents: write
+  issues: read
+
+jobs:
+  capture:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chore/autonomy-blocker-diagnostics
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Capture latest blocker and workflow failure
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p docs
+          {
+            echo '# Temporary autonomy blocker diagnostic'
+            echo
+            echo '## Latest comment on Issue #16'
+            echo '```json'
+            gh api "repos/${GITHUB_REPOSITORY}/issues/16/comments?per_page=100" \
+              --jq '.[-1] | {id,created_at,updated_at,user:.user.login,body}'
+            echo '```'
+            echo
+            echo '## Recent autonomous runs'
+            echo '```json'
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/autonomous-delivery.yml/runs?per_page=10" \
+              --jq '.workflow_runs | map({id,event,status,conclusion,head_sha,head_branch,created_at,updated_at,run_number,html_url})'
+            echo '```'
+            echo
+            RUN_ID=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/autonomous-delivery.yml/runs?per_page=20" \
+              --jq '[.workflow_runs[] | select(.conclusion == "failure")] | first | .id // empty')
+            if [ -n "$RUN_ID" ]; then
+              echo '## Latest failed autonomous run'
+              echo "Run ID: $RUN_ID"
+              echo '```text'
+              gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed | tail -n 250 || true
+              echo '```'
+            fi
+          } > docs/AUTONOMY_BLOCKER_DIAGNOSTIC.tmp.md
+
+      - name: Commit diagnostic snapshot
+        run: |
+          rm -f .github/workflows/_capture-autonomy-blocker.yml
+          git config user.name "AOC Diagnostics"
+          git config user.email "aoc-diagnostics@users.noreply.github.com"
+          git add -A
+          git commit -m "chore(autonomy): capture latest blocker diagnostics"
+          git push origin HEAD:chore/autonomy-blocker-diagnostics
