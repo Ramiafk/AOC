@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "rule": "Only the first eligible lot may become active. Every lot requires its own branch, draft PR, CI and CTO decision.",
+  "lots": [
+    {
+      "id": "5J",
+      "status": "ready",
+      "title": "Lot 5J — cycles d’enchères de 24 h et bascule en achat immédiat",
+      "objective": "Orchestrer jusqu’à trois cycles d’enchères consécutifs de 24 heures avec historique immuable, puis basculer le véhicule vers un mode d’achat immédiat configurable lorsqu’aucune adjudication n’a abouti.",
+      "acceptanceCriteria": [
+        "chaque cycle possède son identité, ses dates, ses offres et son résultat",
+        "un cycle terminé sans vente peut créer atomiquement le cycle suivant jusqu’à la limite de trois",
+        "aucune offre d’un cycle précédent ne peut être modifiée ou réutilisée comme offre du cycle suivant",
+        "après le dernier cycle, la stratégie configurée bascule vers achat immédiat ou clôture sans vente",
+        "vente directe, retrait et adjudication ferment la campagne et empêchent toute relance",
+        "les transitions concurrentes ne créent qu’un seul cycle suivant",
+        "migrations peuplées, RLS, FK composites, outbox et tests PostgreSQL sont couverts"
+      ],
+      "outOfScope": [
+        "acceptation manuelle d’une offre sous réserve",
+        "contre-proposition propriétaire",
+        "audience professionnelle/publique",
+        "anti-sniping et enchères automatiques"
+      ]
+    },
+    {
+      "id": "5K",
+      "status": "planned",
+      "title": "Lot 5K — prix de réserve, achat immédiat et décision du propriétaire",
+      "objective": "Gérer les véhicules appartenant à un particulier ou à un tiers, le prix de réserve, l’achat immédiat autorisé et la décision du propriétaire sur les offres sous réserve.",
+      "acceptanceCriteria": [
+        "le propriétaire et son mandat de vente sont vérifiés",
+        "le prix de réserve est versionné et son exposition est configurable",
+        "acheter maintenant ferme atomiquement enchère, garanties et publications",
+        "une offre sous réserve peut être acceptée, refusée ou contre-proposée avec expiration",
+        "aucune décision ne peut être prise par un acteur non autorisé",
+        "historique, notifications et outbox sont conservés"
+      ]
+    },
+    {
+      "id": "5L",
+      "status": "planned",
+      "title": "Lot 5L — audiences marketplace professionnelle et publique",
+      "objective": "Distinguer les annonces et enchères réservées aux professionnels vérifiés, publiques pour les particuliers ou mixtes, avec des données et actions adaptées à chaque audience.",
+      "acceptanceCriteria": [
+        "les professionnels automobiles disposent d’un statut de vérification et d’activités autorisées",
+        "chaque publication définit explicitement son audience",
+        "les champs professionnels sensibles ne fuient pas vers l’audience publique",
+        "les particuliers ne peuvent agir que sur les enchères publiques autorisées",
+        "les API, index et tests couvrent les deux audiences et les changements d’audience"
+      ]
+    },
+    {
+      "id": "5M",
+      "status": "planned",
+      "title": "Lot 5M — inspection et fiche véhicule complète",
+      "objective": "Créer une fiche d’inspection structurée et vérifiable couvrant essai routier, mécanique, carrosserie, intérieur, pneumatiques, historique, documents, photos et vidéos.",
+      "acceptanceCriteria": [
+        "les observations distinguent constat, déclaration et donnée importée",
+        "les défauts sont localisables et reliés à des médias",
+        "les contrôles obligatoires dépendent du type de véhicule",
+        "la publication indique la complétude, la date et l’auteur de l’inspection",
+        "l’historique d’entretien et les documents respectent leurs audiences",
+        "les écrans professionnels et publics utilisent une projection adaptée"
+      ]
+    },
+    {
+      "id": "5N",
+      "status": "planned",
+      "title": "Lot 5N — enchères automatiques, anti-sniping et notifications",
+      "objective": "Améliorer l’engagement et l’équité des enchères par plafond automatique, prolongation anti-sniping, notifications de dépassement et suivi temps réel idempotent.",
+      "acceptanceCriteria": [
+        "une enchère automatique respecte le plafond privé et l’incrément minimal",
+        "les égalités sont départagées de manière déterministe et auditable",
+        "une offre tardive prolonge la fenêtre selon une règle configurée et bornée",
+        "les notifications de dépassement, gain, perte et échéance sont idempotentes",
+        "aucune donnée privée d’enchérisseur n’est exposée aux autres participants",
+        "les scénarios concurrents sont prouvés sous PostgreSQL"
+      ]
+    }
+  ]
+}
