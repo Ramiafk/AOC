@@ -37,8 +37,10 @@ jobs:
       - run: node --check scripts/agents/orchestrator.mjs
       - run: node scripts/agents/orchestrator-io.selftest.mjs
       - run: node --check scripts/agents/github-models-budget.mjs
+      - run: node --check scripts/agents/github-models-resilience.mjs
       - run: node --check scripts/agents/reconcile-issues.mjs
       - run: node scripts/agents/github-models-budget.mjs --self-test
+      - run: node scripts/agents/github-models-resilience.mjs --self-test
       - run: node scripts/agents/reconcile-issues.mjs --self-test
       - run: node scripts/agents/validate-autonomy.mjs
       - run: npx --no-install tsc --noEmit

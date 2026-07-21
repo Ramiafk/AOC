@@ -8,6 +8,7 @@ const requiredFiles = [
   "config/agents/roadmap.json",
   "scripts/agents/agent-runtime.mjs",
   "scripts/agents/github-models-budget.mjs",
+  "scripts/agents/github-models-resilience.mjs",
   "scripts/agents/reconcile-issues.mjs",
   "scripts/agents/orchestrator.mjs",
   "docs/AUTONOMOUS_DELIVERY.md",
@@ -53,6 +54,7 @@ const ci = await fs.readFile(".github/workflows/ci.yml", "utf8");
 const agents = await fs.readFile("AGENTS.md", "utf8");
 const runtime = await fs.readFile("scripts/agents/agent-runtime.mjs", "utf8");
 const budget = await fs.readFile("scripts/agents/github-models-budget.mjs", "utf8");
+const resilience = await fs.readFile("scripts/agents/github-models-resilience.mjs", "utf8");
 const reconciliation = await fs.readFile("scripts/agents/reconcile-issues.mjs", "utf8");
 const orchestrator = await fs.readFile("scripts/agents/orchestrator.mjs", "utf8");
 
@@ -138,7 +140,7 @@ for (const required of [
   "startsWith(github.event.comment.body, '/agent ')",
   "scripts/agents/reconcile-issues.mjs",
   "scripts/agents/orchestrator.mjs",
-  "NODE_OPTIONS: \"--import=./scripts/agents/github-models-budget.mjs\"",
+  "NODE_OPTIONS: \"--import=./scripts/agents/github-models-budget.mjs --import=./scripts/agents/github-models-resilience.mjs\"",
   "npm ci --ignore-scripts",
   "AOC_GITHUB_ONLY"
 ]) {
@@ -156,8 +158,10 @@ for (const required of [
   "node --check scripts/agents/agent-runtime.mjs",
   "node --check scripts/agents/orchestrator.mjs",
   "node --check scripts/agents/github-models-budget.mjs",
+  "node --check scripts/agents/github-models-resilience.mjs",
   "node --check scripts/agents/reconcile-issues.mjs",
   "node scripts/agents/github-models-budget.mjs --self-test",
+  "node scripts/agents/github-models-resilience.mjs --self-test",
   "node scripts/agents/reconcile-issues.mjs --self-test",
   "node scripts/agents/validate-autonomy.mjs",
   "npx --no-install tsc --noEmit"
@@ -171,6 +175,9 @@ for (const required of ["compactMessages", "maxResponseTokens", "413", "toolOutp
 for (const required of ["fitGithubModelsPayload", "maxGithubModelsRequestCharacters", "AOC-GITHUB-MODELS-BUDGET", "--self-test"]) {
   if (!budget.includes(required)) throw new Error(`GitHub Models budget guard is missing: ${required}`);
 }
+for (const required of ["AOC-MODEL-BACKOFF", "retry-after", "MIN_INTERVAL_MS", "MAX_ATTEMPTS", "tool_choice", "finish", "--self-test"]) {
+  if (!resilience.includes(required)) throw new Error(`GitHub Models resilience guard is missing: ${required}`);
+}
 for (const required of ["planIssueReconciliation", "AOC-AUTONOMY-DUPLICATE-LOT", "AOC-AUTONOMY-DUPLICATE-CONTROL", "not_planned", "--self-test"]) {
   if (!reconciliation.includes(required)) throw new Error(`Issue reconciliation guard is missing: ${required}`);
 }
@@ -180,4 +187,4 @@ for (const required of ["normalizedLogin", "prepareLotBranch", "refusing destruc
 if (orchestrator.includes("push\", \"origin\", \"--delete\"")) throw new Error("Orchestrator may destructively delete an orphan branch");
 if (!agents.includes("Le seul orchestrateur actif est **AOC Autonomous Delivery**")) throw new Error("AGENTS.md does not declare a single orchestrator");
 
-console.log(`Autonomy configuration valid: ${entries.length} roles, ${roadmap.lots.length} lots, bounded GitHub Models context, canonical issue registry, pause gate with control commands, stale-queue cancellation, safe recovery, no legacy loop`);
+console.log(`Autonomy configuration valid: ${entries.length} roles, ${roadmap.lots.length} lots, bounded GitHub Models context, paced retries, forced finalization, canonical issue registry, pause gate with control commands, stale-queue cancellation, safe recovery, no legacy loop`);
