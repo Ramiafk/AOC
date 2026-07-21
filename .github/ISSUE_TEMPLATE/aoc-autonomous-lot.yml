@@ -1,0 +1,110 @@
+name: AOC product lot
+about: Define one bounded, sequential AOC development lot
+labels:
+  - lot:ready
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One issue equals one branch and one draft PR. Do not combine unrelated capabilities.
+  - type: input
+    id: lot_id
+    attributes:
+      label: Lot identifier
+      placeholder: 5J
+    validations:
+      required: true
+  - type: input
+    id: title
+    attributes:
+      label: Business title
+    validations:
+      required: true
+  - type: textarea
+    id: objective
+    attributes:
+      label: Business objective
+      description: Describe the user or professional outcome, not an implementation.
+    validations:
+      required: true
+  - type: dropdown
+    id: audiences
+    attributes:
+      label: Primary audience
+      multiple: true
+      options:
+        - AOC platform operator
+        - Vehicle professional
+        - Professional employee
+        - Professional customer
+        - Verified automotive professional marketplace
+        - Public/individual marketplace
+        - Service provider or partner
+    validations:
+      required: true
+  - type: dropdown
+    id: vehicle_scope
+    attributes:
+      label: Vehicle scope
+      multiple: true
+      options:
+        - All vehicle types
+        - Cars and utilities
+        - Motorcycles and scooters
+        - Quads and SSV
+        - Boats and marine vehicles
+        - Leisure vehicles
+        - Other serialized assets
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: In scope
+      placeholder: |
+        - Capability 1
+        - Capability 2
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Explicitly out of scope
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Observable outcome 1
+        - [ ] Negative or concurrency outcome 2
+    validations:
+      required: true
+  - type: textarea
+    id: permissions
+    attributes:
+      label: Permissions and data audiences
+      description: Identify tenant, organization, site, role, owner and public/professional visibility rules.
+    validations:
+      required: true
+  - type: textarea
+    id: migration
+    attributes:
+      label: Data and migration considerations
+      description: Describe historical rows, upgrade tests, RLS and composite integrity when applicable.
+  - type: textarea
+    id: risks
+    attributes:
+      label: Known risks and stop conditions
+  - type: checkboxes
+    id: governance
+    attributes:
+      label: Sequential governance
+      options:
+        - label: No other product lot is active.
+          required: true
+        - label: The lot can be delivered in one coherent PR.
+          required: true
+        - label: Legal, payment-provider or production assumptions are documented or marked for escalation.
+          required: true
