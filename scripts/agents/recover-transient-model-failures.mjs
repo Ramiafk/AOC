@@ -57,18 +57,18 @@ export function buildRecoveryPlan(issue, comments) {
   return {
     issueNumber: issue.number,
     attempt: attempts + 1,
-    blockerId: blocker.id
+    blockerId: blocker.id,
+    removableLabels: ["agent:active", "agent:blocked", "agent:dev-working"].filter(label => labels.has(label))
   };
 }
 
-async function editIssueLabels(number) {
-  await execFileAsync("gh", [
-    "issue", "edit", String(number), "--repo", REPO,
-    "--add-label", "agent:ready",
-    "--remove-label", "agent:active",
-    "--remove-label", "agent:blocked",
-    "--remove-label", "agent:dev-working"
-  ], { env: process.env, maxBuffer: 1024 * 1024 });
+async function editIssueLabels(plan) {
+  const args = [
+    "issue", "edit", String(plan.issueNumber), "--repo", REPO,
+    "--add-label", "agent:ready"
+  ];
+  for (const label of plan.removableLabels) args.push("--remove-label", label);
+  await execFileAsync("gh", args, { env: process.env, maxBuffer: 1024 * 1024 });
 }
 
 async function commentRecovery(plan) {
@@ -95,8 +95,8 @@ async function recover() {
     const comments = await ghJson(["api", `repos/${REPO}/issues/${issue.number}/comments`, "--paginate"]);
     const plan = buildRecoveryPlan(issue, comments || []);
     if (!plan) continue;
+    await editIssueLabels(plan);
     await commentRecovery(plan);
-    await editIssueLabels(plan.issueNumber);
     console.log(`Recovered transient failure for issue #${plan.issueNumber}, attempt ${plan.attempt}/${MAX_RETRIES}`);
   }
 }
@@ -106,6 +106,7 @@ function selfTest() {
   const comments = [{ id: 10, created_at: "2026-07-21T19:00:00Z", body: "Lot suspendu. GitHub Models 429: Too many requests" }];
   const plan = buildRecoveryPlan(issue, comments);
   if (!plan || plan.attempt !== 1 || plan.blockerId !== 10) throw new Error("Transient recovery plan was not created");
+  if (plan.removableLabels.join(",") !== "agent:active,agent:blocked") throw new Error("Only present labels may be removed");
   const humanGate = buildRecoveryPlan({ ...issue, labels: [...issue.labels, { name: "agent:human-gate" }] }, comments);
   if (humanGate) throw new Error("Human gate must never be retried");
   const exhausted = buildRecoveryPlan(issue, [
