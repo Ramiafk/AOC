@@ -477,9 +477,26 @@ async function mergePr(pr) {
 
 async function handlePr(pr) {
   const currentLabels = labelsOf(pr);
-  if (currentLabels.has("agent:blocked") || currentLabels.has("agent:human-gate")) return;
+  if (currentLabels.has("agent:human-gate")) return;
   const comments = await prComments(pr.number);
   const trusted = trustedComments(comments);
+  const bootstrapOnly = pr.body?.includes("AOC-AUTONOMY: do-not-remove") &&
+    !trusted.some(item => item.body?.includes("[AOC-DEV][sha:"));
+  if (bootstrapOnly) {
+    const issueNumber = issueNumberFromPr(pr);
+    const issue = issueNumber ? (await listIssues("all")).find(value => value.number === issueNumber) : null;
+    if (!issue) {
+      await editLabels(pr.number, ["agent:blocked"], ["agent:dev-working", "agent:cto-review"]);
+      await comment(pr.number, "[AOC-ORCHESTRATOR] PR bootstrap sans Issue de lot canonique. Reprise automatique impossible.");
+      return;
+    }
+    await editLabels(pr.number, ["agent:dev-working"], ["agent:blocked", "agent:cto-review", "agent:approved", "agent:changes-required"]);
+    await editLabels(issue.number, ["agent:active", "agent:dev-working"], ["agent:ready", "agent:blocked", "agent:human-gate"]);
+    await comment(pr.number, "[AOC-ORCHESTRATOR] Reprise de l'implementation sur la PR bootstrap existante avant toute revue CTO.");
+    await startLot(issue);
+    return;
+  }
+  if (currentLabels.has("agent:blocked")) return;
   const decision = decisionFromComments(trusted, pr.headRefOid);
   const ci = await latestCi(pr);
   if (decision?.decision === "APPROVED_FOR_MERGE") { if (ci?.status === "completed" && ci.conclusion === "success") await mergePr(pr); return; }
