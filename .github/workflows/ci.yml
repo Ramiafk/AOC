@@ -49,6 +49,14 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/autonomous-delivery.yml/runs?per_page=20" \
             --jq '.workflow_runs | map({id,event,status,conclusion,head_sha,head_branch,created_at,updated_at,run_number,html_url})' \
             | tee .ci-diagnostics/autonomy-runs.json
+          FAIL_ID=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/autonomous-delivery.yml/runs?per_page=20" \
+            --jq '.workflow_runs[] | select(.conclusion == "failure") | .id' | head -n 1)
+          if [ -n "$FAIL_ID" ]; then
+            gh run view "$FAIL_ID" --repo "$GITHUB_REPOSITORY" --log-failed > .ci-diagnostics/latest-failure-full.log 2>&1 || true
+            tail -n 160 .ci-diagnostics/latest-failure-full.log > .ci-diagnostics/latest-failure.log
+          else
+            echo 'No failed autonomous run found.' > .ci-diagnostics/latest-failure.log
+          fi
       - name: Publish autonomous workflow diagnostics
         if: github.event_name == 'pull_request'
         env:
@@ -68,11 +76,17 @@ jobs:
             echo '```json'
             cat .ci-diagnostics/autonomy-runs.json
             echo '```'
+            echo
+            echo '### Dernier échec — fin du journal'
+            echo '```text'
+            cat .ci-diagnostics/latest-failure.log
+            echo '```'
           } > .ci-diagnostics/report.md
           EXISTING=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
             --jq '[.[] | select(.body | contains("AOC-AUTONOMY-DIAGNOSTICS"))] | last | .id // empty')
           if [ -n "$EXISTING" ]; then
-            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${EXISTING}" --raw-field body@=.ci-diagnostics/report.md
+            jq -Rs '{body: .}' .ci-diagnostics/report.md > .ci-diagnostics/comment-patch.json
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${EXISTING}" --input .ci-diagnostics/comment-patch.json
           else
             gh pr comment "$PR_NUMBER" --body-file .ci-diagnostics/report.md
           fi
