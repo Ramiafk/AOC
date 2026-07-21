@@ -59,10 +59,16 @@ jobs:
       - name: Install trusted dependencies without lifecycle scripts
         run: npm ci --ignore-scripts
 
+      - name: Reconcile the autonomous issue registry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/agents/reconcile-issues.mjs
+
       - name: Run GitHub-only multi-agent orchestrator
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_MODELS_TOKEN: ${{ github.token }}
+          NODE_OPTIONS: "--import=./scripts/agents/github-models-budget.mjs"
           AOC_AUTONOMY_ENABLED: ${{ vars.AOC_AUTONOMY_ENABLED || 'true' }}
           AOC_MAX_AGENT_TURNS: ${{ vars.AOC_MAX_AGENT_TURNS }}
           AOC_AGENT_MAX_TOKENS: ${{ vars.AOC_AGENT_MAX_TOKENS }}
