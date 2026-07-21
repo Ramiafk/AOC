@@ -35,7 +35,10 @@ jobs:
             const { data: pulls } = await github.rest.pulls.list({ owner, repo, state: 'open', per_page: 100 });
             const pr = pulls.find((value) => value.head.ref.startsWith('agent/lot-'));
             if (!pr) {
-              await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'autonomous-next-lot.yml', ref: 'main', inputs: { previous_pr: '' } });
+              await github.rest.actions.createWorkflowDispatch({
+                owner, repo, workflow_id: 'autonomous-next-lot.yml', ref: 'main',
+                inputs: { previous_pr: '' }
+              });
               return core.info('No active lot PR; next-lot workflow dispatched');
             }
 
@@ -45,15 +48,34 @@ jobs:
             const ci = latestByContext.get('autonomy/ci');
             const cto = latestByContext.get('autonomy/cto');
             if (ci?.state === 'success' && !cto) {
-              await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'autonomous-cto.yml', ref: 'main', inputs: { pr_number: String(pr.number), expected_head_sha: pr.head.sha } });
+              await github.rest.actions.createWorkflowDispatch({
+                owner, repo, workflow_id: 'autonomous-cto.yml', ref: 'main',
+                inputs: { pr_number: String(pr.number), expected_head_sha: pr.head.sha }
+              });
               return core.info(`CTO review recovered for PR #${pr.number}`);
             }
             if (cto?.state === 'failure') {
-              await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'autonomous-developer.yml', ref: 'main', inputs: { mode: 'fix', issue_number: '', pr_number: String(pr.number), expected_head_sha: pr.head.sha } });
+              await github.rest.actions.createWorkflowDispatch({
+                owner, repo, workflow_id: 'autonomous-developer.yml', ref: 'main',
+                inputs: { mode: 'fix', issue_number: '', pr_number: String(pr.number), expected_head_sha: pr.head.sha }
+              });
               return core.info(`Developer correction recovered for PR #${pr.number}`);
             }
             if (cto?.state === 'success') {
-              await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'autonomous-cto.yml', ref: 'main', inputs: { pr_number: String(pr.number), expected_head_sha: pr.head.sha } });
+              await github.rest.actions.createWorkflowDispatch({
+                owner, repo, workflow_id: 'autonomous-cto.yml', ref: 'main',
+                inputs: { pr_number: String(pr.number), expected_head_sha: pr.head.sha }
+              });
               return core.info(`Approved-but-open PR #${pr.number}; merge revalidation dispatched`);
             }
-            core.info(`PR #${pr.number} is waiting for a green autonomous CI status`);
+            if (!ci || ci.state !== 'success') {
+              const comments = await github.rest.issues.listComments({ owner, repo, issue_number: pr.number, per_page: 100 });
+              const failures = comments.data.filter((comment) => comment.body?.includes('AOS_AUTONOMY_BLOCKED')).length;
+              if (failures >= 3) return core.warning(`Safety stop for PR #${pr.number}: ${failures} failed developer runs`);
+              await github.rest.actions.createWorkflowDispatch({
+                owner, repo, workflow_id: 'autonomous-developer.yml', ref: 'main',
+                inputs: { mode: 'fix', issue_number: '', pr_number: String(pr.number), expected_head_sha: pr.head.sha }
+              });
+              return core.info(`Missing green autonomous CI; developer recovery dispatched for PR #${pr.number}`);
+            }
+            core.info(`PR #${pr.number} has no actionable stalled state`);
