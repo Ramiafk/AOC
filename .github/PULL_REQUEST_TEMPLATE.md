@@ -1,6 +1,11 @@
+<!-- AOC-AUTONOMY: do-not-remove -->
+
 ## Lot
 
-Identifiant et titre :
+- Identifiant et titre :
+- Issue de lot :
+- Branche :
+- Head SHA :
 
 ## Objectif
 
@@ -12,6 +17,7 @@ Identifiant et titre :
 - [ ] migrations
 - [ ] tests
 - [ ] documentation
+- [ ] interface/expérience lorsque pertinente
 
 ## Hors périmètre
 
@@ -23,13 +29,14 @@ Identifiant et titre :
 - [ ] RLS
 - [ ] tests négatifs
 - [ ] aucune donnée sensible nouvelle
+- [ ] audiences publique/professionnelle séparées lorsque pertinentes
 
 ## Transactions et concurrence
 
 - [ ] verrou avant lectures métier
 - [ ] repository transaction-scoped
 - [ ] outbox atomique
-- [ ] idempotence
+- [ ] idempotence/retry
 - [ ] test concurrent PostgreSQL
 
 ## Migration
@@ -37,17 +44,32 @@ Identifiant et titre :
 - [ ] base vide
 - [ ] upgrade depuis données existantes si nécessaire
 - [ ] aucune migration historique modifiée
+- [ ] aucune fausse donnée rétroactive créée
+
+## Interfaces et design
+
+- [ ] chargement, vide et erreur
+- [ ] responsive mobile
+- [ ] clavier et lecteur d’écran
+- [ ] design tokens/marque blanche
+- [ ] données filtrées selon le rôle et l’audience
 
 ## Validation
 
 - Typecheck :
 - Tests :
 - Architecture :
+- CI :
 - SHA final :
-- Statut `autonomy/ci` :
+
+## Rapports multi-agents
+
+## Risques et limites
 
 ## Revue CTO
 
 - [ ] PR en brouillon
 - [ ] aucun autre lot actif
-- [ ] décision CTO requise avant fusion
+- [ ] décision CTO liée au head SHA requise avant fusion
+
+<!-- AOC-LOT-ISSUE: #0 -->

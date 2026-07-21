@@ -1,0 +1,77 @@
+name: AOC Autonomous Delivery
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Motif du passage manuel
+        required: false
+        default: manual
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  issue_comment:
+    types: [created]
+  schedule:
+    - cron: "3,13,23,33,43,53 * * * *"
+
+permissions:
+  actions: write
+  checks: read
+  contents: write
+  issues: write
+  models: read
+  pull-requests: write
+  statuses: read
+
+concurrency:
+  group: aoc-autonomous-delivery
+  cancel-in-progress: false
+
+env:
+  NPM_CONFIG_IGNORE_SCRIPTS: "true"
+  AOC_GITHUB_ONLY: "true"
+
+jobs:
+  orchestrate:
+    if: ${{ vars.AOC_AUTONOMY_ENABLED != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: Checkout trusted governance from main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install trusted dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Run GitHub-only multi-agent orchestrator
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_MODELS_TOKEN: ${{ github.token }}
+          AOC_AUTONOMY_ENABLED: ${{ vars.AOC_AUTONOMY_ENABLED || 'true' }}
+          AOC_MAX_AGENT_TURNS: ${{ vars.AOC_MAX_AGENT_TURNS }}
+          AOC_AGENT_MAX_TOKENS: ${{ vars.AOC_AGENT_MAX_TOKENS }}
+          AOC_MODEL_REASONING: ${{ vars.AOC_MODEL_REASONING }}
+          AOC_MODEL_CODE: ${{ vars.AOC_MODEL_CODE }}
+          AOC_MODEL_FAST: ${{ vars.AOC_MODEL_FAST }}
+          AOC_MODEL_DESIGN: ${{ vars.AOC_MODEL_DESIGN }}
+        run: node scripts/agents/orchestrator.mjs
+
+      - name: Upload immutable agent audit trail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aoc-agent-audit-${{ github.run_id }}
+          path: .agent/
+          if-no-files-found: ignore
+          retention-days: 30

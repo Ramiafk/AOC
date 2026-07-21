@@ -1,13 +1,16 @@
 # Lot autonome actif
 
-## État initial
+## Point de reprise
 
 - Dernier lot fusionné : 5I — Garanties d’enchères
 - Commit de fusion : `82e6f079b6223b61c6cb31afb9b8408d3f78f40e`
-- Prochain lot planifié : 5J — Cycles d’enchères 24 h et relances sur trois jours
-- Source de la roadmap : `config/agents/backlog.json`
-- Orchestration : GitHub Actions autonome
+- Prochain lot planifié : 5J — Cycles d’enchères de 24 h sur trois jours
+- Issue existante : #16
+- Source de la roadmap multi-agents : `config/agents/roadmap.json`
+- Orchestration : `.github/workflows/autonomous-delivery.yml`
 
 ## Source de vérité opérationnelle
 
-Ce fichier donne le point de départ. Après activation, les issues, Pull Requests, statuts `autonomy/ci`, statuts `autonomy/cto` et commentaires GitHub constituent la source de vérité dynamique. Il ne doit pas être modifié par une branche `agent/lot-*`.
+Ce fichier fournit uniquement le point de départ. Après activation, les issues, labels, Pull Requests, SHA, CI et commentaires CTO signés constituent la source de vérité dynamique.
+
+Une branche `agent/*` ne doit jamais modifier ce fichier ni les autres fichiers de gouvernance protégés.

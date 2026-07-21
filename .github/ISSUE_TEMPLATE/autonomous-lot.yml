@@ -1,0 +1,51 @@
+name: Lot autonome AOC
+description: Définir un lot métier compatible avec l’orchestrateur multi-agents
+title: "[LOT] "
+labels:
+  - agent:backlog
+body:
+  - type: input
+    id: lot
+    attributes:
+      label: Identifiant du lot
+      placeholder: 5J
+    validations:
+      required: true
+  - type: input
+    id: title
+    attributes:
+      label: Titre métier
+    validations:
+      required: true
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objectif et valeur utilisateur
+    validations:
+      required: true
+  - type: textarea
+    id: users
+    attributes:
+      label: Utilisateurs et métiers concernés
+    validations:
+      required: true
+  - type: textarea
+    id: rules
+    attributes:
+      label: Règles métier et états
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Critères d’acceptation
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Sécurité, permissions et données
+  - type: textarea
+    id: outside
+    attributes:
+      label: Hors périmètre
